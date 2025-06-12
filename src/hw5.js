@@ -37,10 +37,54 @@ function createBasketballCourt() {
   const court = new THREE.Mesh(courtGeometry, courtMaterial);
   court.receiveShadow = true;
   scene.add(court);
-  
+
   // Note: All court lines, hoops, and other elements have been removed
   // Students will need to implement these features
+
+
+  // Add center line (black line down the horizontal middle)
+  const centerLineGeometry = new THREE.BoxGeometry(0.2, 0.01, 15);
+  const centerLineMaterial = new THREE.MeshPhongMaterial({ 
+    color: 0x000000,  // Black color
+    shininess: 100,   // High shininess value
+    specular: 0x222222 // Subtle specular highlight
+  });
+  const centerLine = new THREE.Mesh(centerLineGeometry, centerLineMaterial);
+  centerLine.position.set(0, 0.11, 0); // Position at the center of the court
+  scene.add(centerLine);
+
+    // Add center circle using RingGeometry
+  const innerRadius = 1.6;
+  const outerRadius = 1.8;
+  const segments = 128;
+
+  const centerCircleGeometry = new THREE.RingGeometry(innerRadius, outerRadius, segments);
+  const centerCircleMaterial = new THREE.MeshBasicMaterial({ 
+    color: 0x000000,  // White circle line
+    shininess: 200,   // High shininess value
+    specular: 0xffffff,
+    side: THREE.DoubleSide
+  });
+  const centerCircle = new THREE.Mesh(centerCircleGeometry, centerCircleMaterial);
+  centerCircle.rotation.x = -Math.PI / 2; // Lay flat
+  centerCircle.position.set(0, 0.11, 0); // Slightly above court to avoid z-fighting
+  scene.add(centerCircle);
+
+  // Right basket (negative Z)
+  addThreePointSideLines();
 }
+function addThreePointSideLines() {
+  const sideLineOneAGeometry = new THREE.BoxGeometry(8, 0.1, 0.1);
+  const sideLineOneAMaterial = new THREE.MeshPhongMaterial({ 
+    color: 0x000000,  // Black color
+    shininess: 100,   // High shininess value
+    specular: 0x222222 // Subtle specular highlight
+  });
+  const sideLineOneA = new THREE.Mesh(sideLineOneAGeometry, sideLineOneAMaterial);
+  sideLineOneB.position.set(11.0, 0.09, 5); // Position at the center of the court
+  scene.add(sideLineOneA);
+}
+
 
 // Create all elements
 createBasketballCourt();
