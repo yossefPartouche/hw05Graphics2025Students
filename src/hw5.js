@@ -40,6 +40,7 @@ function createBasketballCourt() {
 
   addLines();
   addBasketballHoops();
+  addTPointLines();
   addBasketBall();
 }
 
@@ -67,10 +68,7 @@ function addLines() {
   centerCircle.position.set(0, 0.11, 0); // Slightly above court to avoid z-fighting
   scene.add(centerCircle);
 
-  const sideLineOneAGeometry = new THREE.BoxGeometry(8, 0.1, 0.1);
-  const sideLineOneA = new THREE.Mesh(sideLineOneAGeometry, lineMaterial);
-  sideLineOneA.position.set(11.0, 0.09, 5); // Position at the center of the court
-  scene.add(sideLineOneA);
+}
 
 function addTPointLines () {
 const arcRadius = 6.75;
@@ -82,7 +80,7 @@ const thetaLength = Math.PI - 0.2;
 
 const arcGeometry = new THREE.RingGeometry(innerRadius, outerRadius, 64, 1, thetaStart, thetaLength);
 const arcMaterial = new THREE.MeshPhongMaterial({
-  color: 0x000000,
+  color: 0xffffff,
   side: THREE.DoubleSide,
   shininess: 100,
   specular: 0x222222
@@ -104,7 +102,7 @@ const lineHeight = 0.01;
 
 const verticalGeometry = new THREE.BoxGeometry(lineLength, lineHeight, lineThickness);
 const verticalMaterial = new THREE.MeshPhongMaterial({ 
-  color: 0x000000, 
+  color: 0xffffff, 
   shininess: 100, 
   specular: 0x222222 
 });
@@ -126,6 +124,7 @@ const rightLineMirror = new THREE.Mesh(verticalGeometry, verticalMaterial);
 rightLineMirror.position.set(15 - lineLength / 2, 0.11, 6.69);
 scene.add(rightLineMirror);
 }
+
 function addBasketBall() {
   const loader = new THREE.TextureLoader();
 
