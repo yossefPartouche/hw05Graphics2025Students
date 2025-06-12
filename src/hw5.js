@@ -42,6 +42,8 @@ function createBasketballCourt() {
   addBasketballHoops();
   addTPointLines();
   addBasketBall();
+  createBleachers();
+  createScoreboard();
 }
 
 function addLines() {
@@ -126,23 +128,71 @@ scene.add(rightLineMirror);
 }
 
 function addBasketBall() {
-  const loader = new THREE.TextureLoader();
+  const ballRadius = 0.3;
+  const ballGeometry = new THREE.SphereGeometry(ballRadius, 64, 64);
 
-  loader.load('/textures/Leather029_2K-JPG_Color.jpg', (texture) => {
-    const ballRadius = 0.24;
-    const ballGeometry = new THREE.SphereGeometry(ballRadius, 64, 64);
-    const ballMaterial = new THREE.MeshStandardMaterial({
-      map: texture,
-      roughness: 0.7,
-      metalness: 0.0,
-    });
+  const canvas = document.createElement('canvas');
+  canvas.width = 1024;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d');
 
-    const basketball = new THREE.Mesh(ballGeometry, ballMaterial);
-    basketball.position.set(0, ballRadius + 0.05, 0);
-    basketball.castShadow = true;
+  // Fill orange background
+  ctx.fillStyle = '#FF6600';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    scene.add(basketball);
+  // Add leather grain noise for bumpiness (gray-scale)
+  for (let i = 0; i < 20000; i++) {
+    const x = Math.random() * canvas.width;
+    const y = Math.random() * canvas.height;
+    const size = Math.random() * 1.5 + 0.5;
+
+    const gray = 150 + Math.random() * 50;
+    ctx.fillStyle = `rgba(${gray},${gray},${gray},0.1)`;
+    ctx.fillRect(x, y, size, size);
+  }
+
+  // Draw basketball seam lines as vertical and horizontal stripes to wrap nicely
+  ctx.strokeStyle = '#000000';
+  ctx.lineWidth = 10;
+  ctx.lineCap = 'round';
+
+  // Vertical seams (simulate main black lines)
+  for (let i = 0; i <= 6; i++) {
+    const x = (canvas.width / 6) * i;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, canvas.height);
+    ctx.stroke();
+  }
+  //OPTIONAL UNTIL BETTER SOLUTION
+   // Horizontal seam (center line around the ball)
+  //const centerY = canvas.height / 2; // Calculate the vertical center of the canvas
+  //ctx.beginPath();
+  //ctx.moveTo(0, centerY); // Start at the left edge of the canvas
+  //ctx.lineTo(canvas.width, centerY); // Draw a line to the right edge of the canvas
+  //ctx.stroke();
+
+  // Create texture & bump map (using same canvas)
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+
+  // For bump map, create a grayscale version (you can simplify by reusing canvas)
+  // Here just reuse same texture for bump for quick effect (not ideal)
+  const bumpMap = new THREE.CanvasTexture(canvas);
+
+  const material = new THREE.MeshStandardMaterial({
+    map: texture,
+    bumpMap: bumpMap,
+    bumpScale: 0.05,
+    roughness: 0.8,
+    metalness: 0.0,
   });
+
+  const basketball = new THREE.Mesh(ballGeometry, material);
+  basketball.position.set(0, ballRadius + 0.1, 0);
+  basketball.castShadow = true;
+  scene.add(basketball);
 }
 
 function addBasketballHoops() {
@@ -164,8 +214,6 @@ function addBasketballHoops() {
   const boardMaterial   = new THREE.MeshPhongMaterial({ color: 0xffffff, transparent: true, opacity: 0.6, shininess: 100 });
   const rimMaterial     = new THREE.MeshPhongMaterial({ color: 0xff4500 });
   const supportMaterial = new THREE.MeshPhongMaterial({ color: 0x444444 });
-
-
 
   // create hoop at x sign position
   function createHoop(xSign) {
@@ -261,6 +309,81 @@ function addBasketballHoops() {
   //create two hoops
   createHoop(+1);
   createHoop(-1);
+}
+
+function createBleachers() {
+  const bleacherMaterial = new THREE.MeshLambertMaterial({ color: 0x555555 });
+  
+  const courtHalfWidth = 7.5;    // adapt to your court size
+  const stepDepth     = 1.5;     // how “deep” each row is
+  const stepHeight    = 0.5;     // how tall each row is
+  const stepWidth     = 30;      // spans the length of the court
+  const numRows       = 8;       // number of seating tiers
+
+  for (let side of [1, -1]) {    // build on both sides (front/back)
+    for (let i = 0; i < numRows; i++) {
+      const geom = new THREE.BoxGeometry(
+        stepWidth,
+        stepHeight,
+        stepDepth
+      );
+      const mesh = new THREE.Mesh(geom, bleacherMaterial);
+      mesh.castShadow    = true;
+      mesh.receiveShadow = true;
+
+      // position:
+      mesh.position.set(
+        0,
+        // raise each row by its half‐height plus the stack below
+        (i + 0.5) * stepHeight,
+        side * (courtHalfWidth + stepDepth/2 + i * stepDepth)
+      );
+
+      scene.add(mesh);
+    }
+  }
+}
+
+function makeScoreTexture(text) {
+  // first measure how wide the text will be...
+  const temp = document.createElement('canvas');
+  const tctx = temp.getContext('2d');
+  tctx.font = 'bold 200px Arial';
+  const textWidth = tctx.measureText(text).width;
+
+  // give yourself a little padding on each side
+  const padding = 50;
+  const width  = Math.ceil(textWidth + padding*2);
+  const height = 300; // enough for your 200px font
+
+  const canvas = document.createElement('canvas');
+  canvas.width  = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+
+  // background
+  ctx.fillStyle = 'black';
+  ctx.fillRect(0, 0, width, height);
+
+  // draw centered
+  ctx.font         = 'bold 200px Arial';
+  ctx.fillStyle    = 'lime';
+  ctx.textAlign    = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, width/2, height/2);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  return tex;
+}
+
+function createScoreboard() {
+  const tex = makeScoreTexture('00 : 00');
+  const mat = new THREE.SpriteMaterial({ map: tex });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(10, 4, 1);
+  sprite.position.set(0, 8, -25);
+  scene.add(sprite);
 }
 
 // Create all elements
