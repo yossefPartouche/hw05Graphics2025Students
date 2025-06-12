@@ -118,6 +118,7 @@ function addBasketballHoops() {
       hoopHeight,
       0
     );
+    
     scene.add(rim);
 
     // Net 
