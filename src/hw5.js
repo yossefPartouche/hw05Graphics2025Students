@@ -13,9 +13,33 @@ scene.background = new THREE.Color(0x000000);
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
 scene.add(ambientLight);
 
-const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
 directionalLight.position.set(10, 20, 15);
 scene.add(directionalLight);
+
+const hemi = new THREE.HemisphereLight(0xaaaaee /* sky color */, 0x444422 /* ground color */, 0.6 /* intensity */);
+scene.add(hemi);
+
+const point1 = new THREE.PointLight(0xffeeaa, 0.5, 50 /* distance */, 2 /* decay */);
+point1.position.set(-10, 15, -10);
+point1.castShadow = true;
+scene.add(point1);
+
+const point2 = new THREE.PointLight(0xaaffee, 0.4, 50, 2);
+point2.position.set( 10, 15,  10);
+scene.add(point2);
+
+const spot = new THREE.SpotLight(0xffffff, 1);
+spot.angle = Math.PI / 6;
+spot.penumbra = 0.2;
+spot.decay = 2;
+spot.distance = 50;
+spot.position.set(0, 25, 0);
+spot.target.position.set(0, 0, 0);
+spot.castShadow = true;
+spot.shadow.mapSize.width = spot.shadow.mapSize.height = 1024;
+scene.add(spot, spot.target);
+
 
 // Enable shadows
 renderer.shadowMap.enabled = true;
@@ -26,14 +50,36 @@ function degrees_to_radians(degrees) {
   return degrees * (pi/180);
 }
 
+const loader = new THREE.TextureLoader();
+
+const woodColor = loader.load('/textures/wood_floor_diff_4k.jpg');
+const woodNormal = loader.load('/textures/wood_floor_nor_gl_4k.jpg');
+const woodRough = loader.load('/textures/wood_floor_rough_4k.jpg');
+
+// Tell three.js that color maps are in sRGB space
+woodColor.encoding = THREE.sRGBEncoding;
+woodNormal.encoding = THREE.LinearEncoding;
+woodRough.encoding  = THREE.LinearEncoding;
+
+// make the wood repeat instead of stretch
+[woodColor, woodNormal, woodRough].forEach(tex => {
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(8, 8);
+});
+
 // Create basketball court
 function createBasketballCourt() {
   // Court floor - just a simple brown surface
   const courtGeometry = new THREE.BoxGeometry(30, 0.2, 15);
   const courtMaterial = new THREE.MeshPhongMaterial({ 
-    color: 0xc68642,  // Brown wood color
-    shininess: 50
+    map:       woodColor,    // color / albedo
+    normalMap: woodNormal,   // surface detail
+    roughnessMap: woodRough, // how shiny vs matte
+    roughness: 0.6,
+    metalness: 0.1
   });
+
+
   const court = new THREE.Mesh(courtGeometry, courtMaterial);
   court.receiveShadow = true;
   scene.add(court);
@@ -312,7 +358,16 @@ function addBasketballHoops() {
 }
 
 function createBleachers() {
-  const bleacherMaterial = new THREE.MeshLambertMaterial({ color: 0x555555 });
+  const seatColor    = loader.load('/textures/Metal_Color.jpg');
+  const seatNormal   = loader.load('/textures/Metal_Normal.jpg');
+  const seatRough    = loader.load('/textures/Metal_Roughness.jpg');
+  const bleacherMaterial = new THREE.MeshStandardMaterial({
+    map:          seatColor,
+    normalMap:    seatNormal,
+    roughnessMap: seatRough,
+    metalness:    0.7,
+    roughness:    0.8
+  });
   
   const courtHalfWidth = 7.5;    // adapt to your court size
   const stepDepth     = 1.5;     // how “deep” each row is
