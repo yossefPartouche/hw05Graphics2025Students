@@ -40,8 +40,8 @@ function createBasketballCourt() {
 
   addLines();
   addBasketballHoops();
+  addBasketBall();
 }
-
 
 function addLines() {
   // Add center line (black line down the horizontal middle)
@@ -62,7 +62,6 @@ function addLines() {
   const segments = 128;
 
   const centerCircleGeometry = new THREE.RingGeometry(innerRadius, outerRadius, segments);
-
   const centerCircle = new THREE.Mesh(centerCircleGeometry, lineMaterial);
   centerCircle.rotation.x = -Math.PI / 2; // Lay flat
   centerCircle.position.set(0, 0.11, 0); // Slightly above court to avoid z-fighting
@@ -72,6 +71,79 @@ function addLines() {
   const sideLineOneA = new THREE.Mesh(sideLineOneAGeometry, lineMaterial);
   sideLineOneA.position.set(11.0, 0.09, 5); // Position at the center of the court
   scene.add(sideLineOneA);
+
+function addTPointLines () {
+const arcRadius = 6.75;
+const arcWidth = 0.2;
+const innerRadius = arcRadius - arcWidth / 2;
+const outerRadius = arcRadius + arcWidth / 2;
+const thetaStart = -Math.PI / 2 + 0.1;
+const thetaLength = Math.PI - 0.2;
+
+const arcGeometry = new THREE.RingGeometry(innerRadius, outerRadius, 64, 1, thetaStart, thetaLength);
+const arcMaterial = new THREE.MeshPhongMaterial({
+  color: 0x000000,
+  side: THREE.DoubleSide,
+  shininess: 100,
+  specular: 0x222222
+});
+const arcMesh = new THREE.Mesh(arcGeometry, arcMaterial);
+arcMesh.rotation.x = -Math.PI / 2; // Lay flat on court
+arcMesh.position.set(-13.5, 0.11, 0); // Adjust hoopX for baseline + offset
+scene.add(arcMesh);
+
+const arcMeshMirror = new THREE.Mesh(arcGeometry, arcMaterial);
+arcMeshMirror.rotation.x = -Math.PI / 2; // Flat on court
+arcMeshMirror.rotation.y = Math.PI;     // Face the opposite direction
+arcMeshMirror.position.set(13.5, 0.11, 0); // Opposite side of court
+scene.add(arcMeshMirror);
+
+const lineLength = 2.5;      // Length of the line along X
+const lineThickness = 0.2;   // Thickness across Z
+const lineHeight = 0.01;
+
+const verticalGeometry = new THREE.BoxGeometry(lineLength, lineHeight, lineThickness);
+const verticalMaterial = new THREE.MeshPhongMaterial({ 
+  color: 0x000000, 
+  shininess: 100, 
+  specular: 0x222222 
+});
+
+// Now these run along X instead of Z
+const leftLine = new THREE.Mesh(verticalGeometry, verticalMaterial);
+leftLine.position.set(-15 + lineLength / 2, 0.11, -6.69); // adjust Z to arc radius
+scene.add(leftLine);
+
+const rightLine = new THREE.Mesh(verticalGeometry, verticalMaterial);
+rightLine.position.set(-15 + lineLength / 2, 0.11, 6.69); // mirror on Z
+scene.add(rightLine);
+
+const leftLineMirror = new THREE.Mesh(verticalGeometry, verticalMaterial);
+leftLineMirror.position.set(15 - lineLength / 2, 0.11, -6.69);
+scene.add(leftLineMirror);
+
+const rightLineMirror = new THREE.Mesh(verticalGeometry, verticalMaterial);
+rightLineMirror.position.set(15 - lineLength / 2, 0.11, 6.69);
+scene.add(rightLineMirror);
+}
+function addBasketBall() {
+  const loader = new THREE.TextureLoader();
+
+  loader.load('/textures/Leather029_2K-JPG_Color.jpg', (texture) => {
+    const ballRadius = 0.24;
+    const ballGeometry = new THREE.SphereGeometry(ballRadius, 64, 64);
+    const ballMaterial = new THREE.MeshStandardMaterial({
+      map: texture,
+      roughness: 0.7,
+      metalness: 0.0,
+    });
+
+    const basketball = new THREE.Mesh(ballGeometry, ballMaterial);
+    basketball.position.set(0, ballRadius + 0.05, 0);
+    basketball.castShadow = true;
+
+    scene.add(basketball);
+  });
 }
 
 function addBasketballHoops() {
