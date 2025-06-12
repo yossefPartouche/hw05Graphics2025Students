@@ -38,25 +38,21 @@ function createBasketballCourt() {
   court.receiveShadow = true;
   scene.add(court);
 
-  // Note: All court lines, hoops, and other elements have been removed
-  // Students will need to implement these features
-
-
-  
-
   addLines();
+  addBasketballHoops();
   addBasketBall();
 }
 
 function addLines() {
   // Add center line (black line down the horizontal middle)
   const centerLineGeometry = new THREE.BoxGeometry(0.2, 0.01, 15);
-  const centerLineMaterial = new THREE.MeshPhongMaterial({ 
-    color: 0x000000,  // Black color
+  const lineMaterial = new THREE.MeshPhongMaterial({ 
+    color: 0xffffff,  // white color
     shininess: 100,   // High shininess value
     specular: 0x222222 // Subtle specular highlight
   });
-  const centerLine = new THREE.Mesh(centerLineGeometry, centerLineMaterial);
+
+  const centerLine = new THREE.Mesh(centerLineGeometry, lineMaterial);
   centerLine.position.set(0, 0.11, 0); // Position at the center of the court
   scene.add(centerLine);
 
@@ -66,31 +62,16 @@ function addLines() {
   const segments = 128;
 
   const centerCircleGeometry = new THREE.RingGeometry(innerRadius, outerRadius, segments);
-  const centerCircleMaterial = new THREE.MeshPhongMaterial({ 
-    color: 0x000000,  // Black color
-    shininess: 100,   // High shininess value
-    specular: 0x222222 // Subtle specular highlight
-  });
-  const centerCircle = new THREE.Mesh(centerCircleGeometry, centerCircleMaterial);
+  const centerCircle = new THREE.Mesh(centerCircleGeometry, lineMaterial);
   centerCircle.rotation.x = -Math.PI / 2; // Lay flat
   centerCircle.position.set(0, 0.11, 0); // Slightly above court to avoid z-fighting
   scene.add(centerCircle);
+
   const sideLineOneAGeometry = new THREE.BoxGeometry(8, 0.1, 0.1);
-  const sideLineOneAMaterial = new THREE.MeshPhongMaterial({ 
-    color: 0x000000,  // Black color
-    shininess: 100,   // High shininess value
-    specular: 0x222222 // Subtle specular highlight
-  });
-  
+  const sideLineOneA = new THREE.Mesh(sideLineOneAGeometry, lineMaterial);
+  sideLineOneA.position.set(11.0, 0.09, 5); // Position at the center of the court
+  scene.add(sideLineOneA);
 
-/////////////////////////////////////////////////////////////////////////////
-
-addTPointLines();
-addBasketBall();
-
-
-
-}
 function addTPointLines () {
 const arcRadius = 6.75;
 const arcWidth = 0.2;
@@ -165,6 +146,123 @@ function addBasketBall() {
   });
 }
 
+function addBasketballHoops() {
+  // 1. Constants
+  const hoopHeight = 3.048;                // 10 ft
+  const courtWidth = 30;                  // from your court geometry
+  const halfCourt = courtWidth / 2;       // 7.5 m
+  const backboardWidth = 1.8;              // NBA spec ≈ 1.83 m
+  const backboardHeight = 1.05;            // ≈ 1.05 m
+  const backboardThickness = 0.05;
+  const rimRadius = 0.45;                  // ≈ 0.45 m
+  const rimTubeRadius = 0.02;
+  const netDepth = 0.5;                    // how far the net hangs down
+  const poleRadius = 0.1;
+  const poleHeight = hoopHeight;     // pole goes up just under rim
+  const armLength = 1.0; 
+
+  // Materials
+  const boardMaterial   = new THREE.MeshPhongMaterial({ color: 0xffffff, transparent: true, opacity: 0.6, shininess: 100 });
+  const rimMaterial     = new THREE.MeshPhongMaterial({ color: 0xff4500 });
+  const supportMaterial = new THREE.MeshPhongMaterial({ color: 0x444444 });
+
+
+
+  // create hoop at x sign position
+  function createHoop(xSign) {
+    // Backboard
+    const boardGeometry = new THREE.BoxGeometry(backboardWidth, backboardHeight, backboardThickness);
+    const backboard = new THREE.Mesh(boardGeometry, boardMaterial);
+    backboard.position.set(
+      xSign * (halfCourt - armLength + backboardThickness*2),
+      poleHeight + backboardHeight / 2 - 0.4,
+      0
+    );
+    backboard.rotation.y = xSign * Math.PI/2;
+    scene.add(backboard);
+
+    //Rim
+    const rimGeometry = new THREE.TorusGeometry(rimRadius, rimTubeRadius, 16, 100);
+    const rim = new THREE.Mesh(rimGeometry, rimMaterial);
+    rim.rotation.x = Math.PI / 2;
+    rim.position.set(
+      xSign * (halfCourt - armLength - rimRadius + backboardThickness*2),
+      hoopHeight,
+      0
+    );
+    
+    scene.add(rim);
+
+    // Net 
+    const netGroup = new THREE.Group();
+    const segments     = 16;
+    const rimCenterX   = xSign * (halfCourt - armLength - rimRadius + backboardThickness*2);
+    const yTop         = hoopHeight - rimTubeRadius;
+    const bottomHeight = yTop - netDepth;
+    const topRadius    = rimRadius;
+    const bottomRadius = rimRadius * 0.9;  // slightly tighter at bottom
+
+    // Net - top & bottom ring points
+    const topPoints    = [];
+    const bottomPoints = [];
+    for (let i = 0; i < segments; i++) {
+      const θ  = (i/segments) * Math.PI * 2;
+      const cx = Math.cos(θ), sz = Math.sin(θ);
+      topPoints.push(
+        new THREE.Vector3(rimCenterX + cx*topRadius,    yTop,        sz*topRadius)
+      );
+      bottomPoints.push(
+        new THREE.Vector3(rimCenterX + cx*bottomRadius, bottomHeight, sz*bottomRadius)
+      );
+    }
+
+    // Net - bottom ring (horizontal circle)
+    for (let i = 0; i < segments; i++) {
+      const p1 = bottomPoints[i];
+      const p2 = bottomPoints[(i+1)%segments];
+      const g = new THREE.BufferGeometry().setFromPoints([p1,p2]);
+      netGroup.add(new THREE.Line(g, rimMaterial));
+    }
+
+    // Net - forward diagonal mesh lines
+    for (let i = 0; i < segments; i++) {
+      const top = topPoints[i];
+      const bottom = bottomPoints[(i+1)%segments];
+      const g = new THREE.BufferGeometry().setFromPoints([top, bottom]);
+      netGroup.add(new THREE.Line(g, rimMaterial));
+    }
+
+    // Net - backward diagonal mesh lines
+    for (let i = 0; i < segments; i++) {
+      const top = topPoints[i];
+      const bottom = bottomPoints[(i-1+segments)%segments];
+      const g = new THREE.BufferGeometry().setFromPoints([top, bottom]);
+      netGroup.add(new THREE.Line(g,rimMaterial))
+    }
+    
+    scene.add(netGroup);
+
+    // Pole
+    const poleGeo = new THREE.CylinderGeometry(poleRadius, poleRadius, poleHeight, 12);
+    const pole = new THREE.Mesh(poleGeo, supportMaterial);
+    pole.position.set(
+      xSign * (halfCourt + poleRadius),
+      poleHeight / 2,
+      0
+    );
+    scene.add(pole);
+
+    // Arm
+    const armGeo = new THREE.BoxGeometry(armLength, 0.1, 0.1);
+    const arm = new THREE.Mesh(armGeo, supportMaterial);
+    arm.position.set(xSign * (halfCourt - poleRadius * 2 - 0.2), hoopHeight - 0.07,0);
+    scene.add(arm);
+  }
+  
+  //create two hoops
+  createHoop(+1);
+  createHoop(-1);
+}
 
 // Create all elements
 createBasketballCourt();
