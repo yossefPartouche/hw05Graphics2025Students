@@ -3,11 +3,15 @@ import {OrbitControls} from './OrbitControls.js'
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 
+const loder = new THREE.TextureLoader();
+const backgr = loder.load('/textures/space2.png');
+
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 // Set background color
-scene.background = new THREE.Color(0x000000);
+//scene.background = new THREE.Color(0x000000);
+scene.background = backgr
 
 // Add lights to the scene
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
@@ -172,7 +176,7 @@ const rightLineMirror = new THREE.Mesh(verticalGeometry, verticalMaterial);
 rightLineMirror.position.set(15 - lineLength / 2, 0.11, 6.69);
 scene.add(rightLineMirror);
 }
-
+/*
 function addBasketBall() {
   const ballRadius = 0.3;
   const ballGeometry = new THREE.SphereGeometry(ballRadius, 64, 64);
@@ -240,6 +244,32 @@ function addBasketBall() {
   basketball.castShadow = true;
   scene.add(basketball);
 }
+*/
+function addBasketBall() {
+  const ballRadius = 0.3;
+  const ballGeometry = new THREE.SphereGeometry(ballRadius, 128, 128);
+
+  const textureLoader = new THREE.TextureLoader();
+  textureLoader.load('/textures/balldimpled2.png', (texture) => {
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.anisotropy = 16;
+
+    const material = new THREE.MeshStandardMaterial({
+      map: texture,
+      bumpMap: texture,       // optionally reuse for bump
+      bumpScale: 0.05,
+      roughness: 0.8,
+      metalness: 0.0,
+    });
+
+    const basketball = new THREE.Mesh(ballGeometry, material);
+    basketball.position.set(0, ballRadius + 0.1, 0);
+    basketball.castShadow = true;
+    scene.add(basketball);
+  });
+}
+
 
 function addBasketballHoops() {
   // 1. Constants
