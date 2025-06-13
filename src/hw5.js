@@ -1,17 +1,63 @@
 import {OrbitControls} from './OrbitControls.js'
-
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-const loder = new THREE.TextureLoader();
-const backgr = loder.load('/textures/space2.png');
-
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
+
 document.body.appendChild(renderer.domElement);
-// Set background color
-//scene.background = new THREE.Color(0x000000);
-scene.background = backgr
+
+// add sky background
+const size = 512;                        
+const skyCanvas = document.createElement('canvas');
+skyCanvas.width = skyCanvas.height = size;
+const ctx = skyCanvas.getContext('2d');
+
+const grad = ctx.createLinearGradient(0, 0, 0, size);
+grad.addColorStop(0, '#87CEEB');
+grad.addColorStop(1, '#ffffff');  
+ctx.fillStyle = grad;
+ctx.fillRect(0, 0, size, size);
+
+const skyTexture = new THREE.CanvasTexture(skyCanvas);
+scene.background = skyTexture;
+
+// add grass plane
+const gsize = 200;
+const groundGeo = new THREE.PlaneGeometry(gsize, gsize);
+const groundMat = new THREE.MeshStandardMaterial({ 
+  color: 0x444444,   
+  side: THREE.DoubleSide
+});
+
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = - Math.PI / 2; 
+ground.position.y = -0.01;         
+ground.receiveShadow = true;        
+scene.add(ground);
+
+const cvs = document.createElement('canvas');
+cvs.width = cvs.height = gsize;
+const gctx = cvs.getContext('2d');
+gctx.fillStyle = '#4A7C0E';
+gctx.fillRect(0, 0, gsize, gsize);
+gctx.strokeStyle = '#3A5F0B';
+gctx.lineWidth = 1;
+for (let i = 0; i < 800; i++) {
+  const x = Math.random() * gsize;
+  const y = Math.random() * gsize;
+  const h = Math.random() * 12 + 4;
+  gctx.beginPath();
+  gctx.moveTo(x, y);
+  gctx.lineTo(x + (Math.random() - 0.5) * 2, y - h);
+  gctx.stroke();
+}
+
+const grassCanvasTex = new THREE.CanvasTexture(cvs);
+grassCanvasTex.wrapS = grassCanvasTex.wrapT = THREE.RepeatWrapping;
+grassCanvasTex.repeat.set(50, 50);
+ground.material.map = grassCanvasTex;
+ground.material.needsUpdate = true;
 
 // Add lights to the scene
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
@@ -44,7 +90,6 @@ spot.castShadow = true;
 spot.shadow.mapSize.width = spot.shadow.mapSize.height = 1024;
 scene.add(spot, spot.target);
 
-
 // Enable shadows
 renderer.shadowMap.enabled = true;
 directionalLight.castShadow = true;
@@ -56,11 +101,11 @@ function degrees_to_radians(degrees) {
 
 const loader = new THREE.TextureLoader();
 
+// add wood floor
 const woodColor = loader.load('/textures/wood_floor_diff_4k.jpg');
 const woodNormal = loader.load('/textures/wood_floor_nor_gl_4k.jpg');
 const woodRough = loader.load('/textures/wood_floor_rough_4k.jpg');
 
-// Tell three.js that color maps are in sRGB space
 woodColor.encoding = THREE.sRGBEncoding;
 woodNormal.encoding = THREE.LinearEncoding;
 woodRough.encoding  = THREE.LinearEncoding;
@@ -73,16 +118,14 @@ woodRough.encoding  = THREE.LinearEncoding;
 
 // Create basketball court
 function createBasketballCourt() {
-  // Court floor - just a simple brown surface
   const courtGeometry = new THREE.BoxGeometry(30, 0.2, 15);
   const courtMaterial = new THREE.MeshPhongMaterial({ 
-    map:       woodColor,    // color / albedo
-    normalMap: woodNormal,   // surface detail
-    roughnessMap: woodRough, // how shiny vs matte
+    map: woodColor,
+    normalMap: woodNormal,
+    roughnessMap: woodRough,
     roughness: 0.6,
     metalness: 0.1
   });
-
 
   const court = new THREE.Mesh(courtGeometry, courtMaterial);
   court.receiveShadow = true;
@@ -91,7 +134,7 @@ function createBasketballCourt() {
   addLines();
   addBasketballHoops();
   addTPointLines();
-  addBasketBall();
+  addBasketBall2();
   createBleachers();
   createScoreboard();
 }
@@ -109,7 +152,7 @@ function addLines() {
   centerLine.position.set(0, 0.11, 0); // Position at the center of the court
   scene.add(centerLine);
 
-    // Add center circle using RingGeometry
+  // Add center circle using RingGeometry
   const innerRadius = 1.6;
   const outerRadius = 1.8;
   const segments = 128;
@@ -123,129 +166,137 @@ function addLines() {
 }
 
 function addTPointLines () {
-const arcRadius = 6.75;
-const arcWidth = 0.2;
-const innerRadius = arcRadius - arcWidth / 2;
-const outerRadius = arcRadius + arcWidth / 2;
-const thetaStart = -Math.PI / 2 + 0.1;
-const thetaLength = Math.PI - 0.2;
+  const arcRadius = 6.75;
+  const arcWidth = 0.2;
+  const innerRadius = arcRadius - arcWidth / 2;
+  const outerRadius = arcRadius + arcWidth / 2;
+  const thetaStart = -Math.PI / 2 + 0.1;
+  const thetaLength = Math.PI - 0.2;
 
-const arcGeometry = new THREE.RingGeometry(innerRadius, outerRadius, 64, 1, thetaStart, thetaLength);
-const arcMaterial = new THREE.MeshPhongMaterial({
-  color: 0xffffff,
-  side: THREE.DoubleSide,
-  shininess: 100,
-  specular: 0x222222
-});
-const arcMesh = new THREE.Mesh(arcGeometry, arcMaterial);
-arcMesh.rotation.x = -Math.PI / 2; // Lay flat on court
-arcMesh.position.set(-13.5, 0.11, 0); // Adjust hoopX for baseline + offset
-scene.add(arcMesh);
+  const arcGeometry = new THREE.RingGeometry(innerRadius, outerRadius, 64, 1, thetaStart, thetaLength);
+  const arcMaterial = new THREE.MeshPhongMaterial({
+    color: 0xffffff,
+    side: THREE.DoubleSide,
+    shininess: 100,
+    specular: 0x222222
+  });
+  const arcMesh = new THREE.Mesh(arcGeometry, arcMaterial);
+  arcMesh.rotation.x = -Math.PI / 2; // Lay flat on court
+  arcMesh.position.set(-13.5, 0.11, 0); // Adjust hoopX for baseline + offset
+  scene.add(arcMesh);
 
-const arcMeshMirror = new THREE.Mesh(arcGeometry, arcMaterial);
-arcMeshMirror.rotation.x = -Math.PI / 2; // Flat on court
-arcMeshMirror.rotation.y = Math.PI;     // Face the opposite direction
-arcMeshMirror.position.set(13.5, 0.11, 0); // Opposite side of court
-scene.add(arcMeshMirror);
+  const arcMeshMirror = new THREE.Mesh(arcGeometry, arcMaterial);
+  arcMeshMirror.rotation.x = -Math.PI / 2; // Flat on court
+  arcMeshMirror.rotation.y = Math.PI;     // Face the opposite direction
+  arcMeshMirror.position.set(13.5, 0.11, 0); // Opposite side of court
+  scene.add(arcMeshMirror);
 
-const lineLength = 2.5;      // Length of the line along X
-const lineThickness = 0.2;   // Thickness across Z
-const lineHeight = 0.01;
+  const lineLength = 2.5;      // Length of the line along X
+  const lineThickness = 0.2;   // Thickness across Z
+  const lineHeight = 0.01;
 
-const verticalGeometry = new THREE.BoxGeometry(lineLength, lineHeight, lineThickness);
-const verticalMaterial = new THREE.MeshPhongMaterial({ 
-  color: 0xffffff, 
-  shininess: 100, 
-  specular: 0x222222 
-});
+  const verticalGeometry = new THREE.BoxGeometry(lineLength, lineHeight, lineThickness);
+  const verticalMaterial = new THREE.MeshPhongMaterial({ 
+    color: 0xffffff, 
+    shininess: 100, 
+    specular: 0x222222 
+  });
 
-// Now these run along X instead of Z
-const leftLine = new THREE.Mesh(verticalGeometry, verticalMaterial);
-leftLine.position.set(-15 + lineLength / 2, 0.11, -6.69); // adjust Z to arc radius
-scene.add(leftLine);
+  // Now these run along X instead of Z
+  const leftLine = new THREE.Mesh(verticalGeometry, verticalMaterial);
+  leftLine.position.set(-15 + lineLength / 2, 0.11, -6.69); // adjust Z to arc radius
+  scene.add(leftLine);
 
-const rightLine = new THREE.Mesh(verticalGeometry, verticalMaterial);
-rightLine.position.set(-15 + lineLength / 2, 0.11, 6.69); // mirror on Z
-scene.add(rightLine);
+  const rightLine = new THREE.Mesh(verticalGeometry, verticalMaterial);
+  rightLine.position.set(-15 + lineLength / 2, 0.11, 6.69); // mirror on Z
+  scene.add(rightLine);
 
-const leftLineMirror = new THREE.Mesh(verticalGeometry, verticalMaterial);
-leftLineMirror.position.set(15 - lineLength / 2, 0.11, -6.69);
-scene.add(leftLineMirror);
+  const leftLineMirror = new THREE.Mesh(verticalGeometry, verticalMaterial);
+  leftLineMirror.position.set(15 - lineLength / 2, 0.11, -6.69);
+  scene.add(leftLineMirror);
 
-const rightLineMirror = new THREE.Mesh(verticalGeometry, verticalMaterial);
-rightLineMirror.position.set(15 - lineLength / 2, 0.11, 6.69);
-scene.add(rightLineMirror);
+  const rightLineMirror = new THREE.Mesh(verticalGeometry, verticalMaterial);
+  rightLineMirror.position.set(15 - lineLength / 2, 0.11, 6.69);
+  scene.add(rightLineMirror);
 }
-/*
-function addBasketBall() {
-  const ballRadius = 0.3;
-  const ballGeometry = new THREE.SphereGeometry(ballRadius, 64, 64);
 
+function addBasketBall1() {
+  const ballRadius  = 0.3;
+  const ballGeometry = new THREE.SphereGeometry(ballRadius, 64, 64);
+  const textureLoader = new THREE.TextureLoader();
+
+  // Create an off-screen canvas
   const canvas = document.createElement('canvas');
   canvas.width = 1024;
   canvas.height = 512;
   const ctx = canvas.getContext('2d');
 
-  // Fill orange background
-  ctx.fillStyle = '#FF6600';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // Load the leather color image first
+  textureLoader.load(
+    '/textures/Leather/Leather_Color.jpg',
+    leatherTex => {
+      // draw the leather onto canvas
+      ctx.drawImage(leatherTex.image, 0, 0, canvas.width, canvas.height);
 
-  // Add leather grain noise for bumpiness (gray-scale)
-  for (let i = 0; i < 20000; i++) {
-    const x = Math.random() * canvas.width;
-    const y = Math.random() * canvas.height;
-    const size = Math.random() * 1.5 + 0.5;
+      // Overlay  black seams
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth   = 10;
+      ctx.lineCap     = 'round';
 
-    const gray = 150 + Math.random() * 50;
-    ctx.fillStyle = `rgba(${gray},${gray},${gray},0.1)`;
-    ctx.fillRect(x, y, size, size);
-  }
+      // vertical seams
+      for (let i = 0; i <= 6; i++) {
+        const x = (canvas.width / 6) * i;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+      }
 
-  // Draw basketball seam lines as vertical and horizontal stripes to wrap nicely
-  ctx.strokeStyle = '#000000';
-  ctx.lineWidth = 10;
-  ctx.lineCap = 'round';
+      // horizontal seam
+      //const centerY = canvas.height / 2;
+      //ctx.beginPath();
+      //ctx.moveTo(0, centerY);
+      //ctx.lineTo(canvas.width, centerY);
+      //ctx.stroke();
 
-  // Vertical seams (simulate main black lines)
-  for (let i = 0; i <= 6; i++) {
-    const x = (canvas.width / 6) * i;
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, canvas.height);
-    ctx.stroke();
-  }
-  //OPTIONAL UNTIL BETTER SOLUTION
-   // Horizontal seam (center line around the ball)
-  //const centerY = canvas.height / 2; // Calculate the vertical center of the canvas
-  //ctx.beginPath();
-  //ctx.moveTo(0, centerY); // Start at the left edge of the canvas
-  //ctx.lineTo(canvas.width, centerY); // Draw a line to the right edge of the canvas
-  //ctx.stroke();
+      // Create a single composite texture from canvas
+      const compositeTex = new THREE.CanvasTexture(canvas);
+      compositeTex.wrapS   = THREE.RepeatWrapping;
+      compositeTex.wrapT   = THREE.RepeatWrapping;
+      compositeTex.encoding = THREE.sRGBEncoding;
 
-  // Create texture & bump map (using same canvas)
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.ClampToEdgeWrapping;
+      // Load normal & roughness maps
+      const normalMap = textureLoader.load('/textures/Leather/Leather_Normal.jpg');
+      const roughMap  = textureLoader.load('/textures/Leather/Leather_Roughness.jpg');
 
-  // For bump map, create a grayscale version (you can simplify by reusing canvas)
-  // Here just reuse same texture for bump for quick effect (not ideal)
-  const bumpMap = new THREE.CanvasTexture(canvas);
+      // repeat them to match leather detail scale
+      [normalMap, roughMap].forEach(tex => {
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(8, 8);
+        tex.encoding = THREE.LinearEncoding;
+      });
 
-  const material = new THREE.MeshStandardMaterial({
-    map: texture,
-    bumpMap: bumpMap,
-    bumpScale: 0.05,
-    roughness: 0.8,
-    metalness: 0.0,
-  });
+      // Build the material using composite + PBR maps
+      const material = new THREE.MeshPhongMaterial({
+        map:          compositeTex,
+        normalMap:    normalMap,
+        roughnessMap: roughMap,
+        roughness:    0.6,
+        metalness:    0.1
+      });
 
-  const basketball = new THREE.Mesh(ballGeometry, material);
-  basketball.position.set(0, ballRadius + 0.1, 0);
-  basketball.castShadow = true;
-  scene.add(basketball);
+      // Create & add the mesh
+      const basketball = new THREE.Mesh(ballGeometry, material);
+      basketball.position.set(0, ballRadius + 0.1, 0);
+      basketball.castShadow = true;
+      scene.add(basketball);
+    },
+    undefined,
+    err => console.error('Failed to load leather texture:', err)
+  );
 }
-*/
-function addBasketBall() {
+
+function addBasketBall2() {
   const ballRadius = 0.3;
   const ballGeometry = new THREE.SphereGeometry(ballRadius, 128, 128);
 
@@ -270,26 +321,36 @@ function addBasketBall() {
   });
 }
 
-
 function addBasketballHoops() {
-  // 1. Constants
-  const hoopHeight = 3.048;                // 10 ft
-  const courtWidth = 30;                  // from your court geometry
-  const halfCourt = courtWidth / 2;       // 7.5 m
-  const backboardWidth = 1.8;              // NBA spec ≈ 1.83 m
-  const backboardHeight = 1.05;            // ≈ 1.05 m
+  // Constants
+  const hoopHeight = 3.048;
+  const courtWidth = 30;                  
+  const halfCourt = courtWidth / 2;       
+  const backboardWidth = 1.8;              
+  const backboardHeight = 1.05;     
   const backboardThickness = 0.05;
-  const rimRadius = 0.45;                  // ≈ 0.45 m
+  const rimRadius = 0.45;          
   const rimTubeRadius = 0.02;
-  const netDepth = 0.5;                    // how far the net hangs down
+  const netDepth = 0.5;            
   const poleRadius = 0.1;
-  const poleHeight = hoopHeight;     // pole goes up just under rim
+  const poleHeight = hoopHeight;
   const armLength = 1.0; 
 
   // Materials
   const boardMaterial   = new THREE.MeshPhongMaterial({ color: 0xffffff, transparent: true, opacity: 0.6, shininess: 100 });
   const rimMaterial     = new THREE.MeshPhongMaterial({ color: 0xff4500 });
-  const supportMaterial = new THREE.MeshPhongMaterial({ color: 0x444444 });
+  const netMaterial = new THREE.LineBasicMaterial({ color: 0xffffff });
+  
+  const supportColor    = loader.load('/textures/Metal_Color.jpg');
+  const supportNormal   = loader.load('/textures/Metal_Normal.jpg');
+  const supportRough    = loader.load('/textures/Metal_Roughness.jpg');
+  const supportMaterial = new THREE.MeshStandardMaterial({
+    map:          supportColor,
+    normalMap:    supportNormal,
+    roughnessMap: supportRough,
+    metalness:    0.7,
+    roughness:    0.8
+  });
 
   // create hoop at x sign position
   function createHoop(xSign) {
@@ -323,7 +384,7 @@ function addBasketballHoops() {
     const yTop         = hoopHeight - rimTubeRadius;
     const bottomHeight = yTop - netDepth;
     const topRadius    = rimRadius;
-    const bottomRadius = rimRadius * 0.9;  // slightly tighter at bottom
+    const bottomRadius = rimRadius * 0.7;  // slightly tighter at bottom
 
     // Net - top & bottom ring points
     const topPoints    = [];
@@ -332,7 +393,7 @@ function addBasketballHoops() {
       const θ  = (i/segments) * Math.PI * 2;
       const cx = Math.cos(θ), sz = Math.sin(θ);
       topPoints.push(
-        new THREE.Vector3(rimCenterX + cx*topRadius,    yTop,        sz*topRadius)
+        new THREE.Vector3(rimCenterX + cx*topRadius, yTop, sz*topRadius)
       );
       bottomPoints.push(
         new THREE.Vector3(rimCenterX + cx*bottomRadius, bottomHeight, sz*bottomRadius)
@@ -344,7 +405,7 @@ function addBasketballHoops() {
       const p1 = bottomPoints[i];
       const p2 = bottomPoints[(i+1)%segments];
       const g = new THREE.BufferGeometry().setFromPoints([p1,p2]);
-      netGroup.add(new THREE.Line(g, rimMaterial));
+      netGroup.add(new THREE.Line(g, netMaterial));
     }
 
     // Net - forward diagonal mesh lines
@@ -352,7 +413,7 @@ function addBasketballHoops() {
       const top = topPoints[i];
       const bottom = bottomPoints[(i+1)%segments];
       const g = new THREE.BufferGeometry().setFromPoints([top, bottom]);
-      netGroup.add(new THREE.Line(g, rimMaterial));
+      netGroup.add(new THREE.Line(g, netMaterial));
     }
 
     // Net - backward diagonal mesh lines
@@ -360,7 +421,7 @@ function addBasketballHoops() {
       const top = topPoints[i];
       const bottom = bottomPoints[(i-1+segments)%segments];
       const g = new THREE.BufferGeometry().setFromPoints([top, bottom]);
-      netGroup.add(new THREE.Line(g,rimMaterial))
+      netGroup.add(new THREE.Line(g,netMaterial))
     }
     
     scene.add(netGroup);
@@ -399,13 +460,14 @@ function createBleachers() {
     roughness:    0.8
   });
   
-  const courtHalfWidth = 7.5;    // adapt to your court size
-  const stepDepth     = 1.5;     // how “deep” each row is
-  const stepHeight    = 0.5;     // how tall each row is
-  const stepWidth     = 30;      // spans the length of the court
-  const numRows       = 8;       // number of seating tiers
+  const courtHalfWidth = 7.5; 
+  const stepDepth     = 1.5; // how “deep” each row is
+  const stepHeight    = 0.5; // how tall each row is
+  const stepWidth     = 30;
+  const numRows       = 8; // number of seating tiers
 
-  for (let side of [1, -1]) {    // build on both sides (front/back)
+  // build on both sides (front/back)
+  for (let side of [1, -1]) {  
     for (let i = 0; i < numRows; i++) {
       const geom = new THREE.BoxGeometry(
         stepWidth,
@@ -430,16 +492,16 @@ function createBleachers() {
 }
 
 function makeScoreTexture(text) {
-  // first measure how wide the text will be...
+  // first measure how wide the text will be
   const temp = document.createElement('canvas');
   const tctx = temp.getContext('2d');
   tctx.font = 'bold 200px Arial';
   const textWidth = tctx.measureText(text).width;
 
-  // give yourself a little padding on each side
+  // add padding on each side
   const padding = 50;
   const width  = Math.ceil(textWidth + padding*2);
-  const height = 300; // enough for your 200px font
+  const height = 300;
 
   const canvas = document.createElement('canvas');
   canvas.width  = width;
