@@ -63,36 +63,45 @@ ground.material.needsUpdate = true;
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
 scene.add(ambientLight);
 
-const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
 directionalLight.position.set(10, 20, 15);
 scene.add(directionalLight);
 
 const hemi = new THREE.HemisphereLight(0xaaaaee /* sky color */, 0x444422 /* ground color */, 0.6 /* intensity */);
 scene.add(hemi);
 
-const point1 = new THREE.PointLight(0xffeeaa, 0.5, 50 /* distance */, 2 /* decay */);
-point1.position.set(-10, 15, -10);
-point1.castShadow = true;
-scene.add(point1);
-
-const point2 = new THREE.PointLight(0xaaffee, 0.4, 50, 2);
-point2.position.set( 10, 15,  10);
-scene.add(point2);
-
 const spot = new THREE.SpotLight(0xffffff, 1);
 spot.angle = Math.PI / 6;
 spot.penumbra = 0.2;
 spot.decay = 2;
 spot.distance = 50;
-spot.position.set(0, 25, 0);
-spot.target.position.set(0, 0, 0);
-spot.castShadow = true;
+spot.position.set(0, 10, 10);
+spot.target.position.set(13.5,3,0);
 spot.shadow.mapSize.width = spot.shadow.mapSize.height = 1024;
 scene.add(spot, spot.target);
+
+const spot2 = new THREE.SpotLight(0xffffff, 1);
+spot2.angle = Math.PI / 6;
+spot2.penumbra = 0.2;
+spot2.decay = 2;
+spot2.distance = 50;
+spot2.position.set(0, 10, 10);
+spot2.target.position.set(-13.5,3,0);
+spot2.shadow.mapSize.width = spot2.shadow.mapSize.height = 1024;
+scene.add(spot2, spot2.target);
 
 // Enable shadows
 renderer.shadowMap.enabled = true;
 directionalLight.castShadow = true;
+
+const d = 16
+const s = d * 1.2;
+directionalLight.shadow.camera.left   = -s;
+directionalLight.shadow.camera.right  =  s;
+directionalLight.shadow.camera.top    =  s;
+directionalLight.shadow.camera.bottom = -s;
+directionalLight.shadow.camera.near   =  0.5;
+directionalLight.shadow.camera.far    =  50;
 
 function degrees_to_radians(degrees) {
   var pi = Math.PI;
@@ -150,6 +159,7 @@ function addLines() {
 
   const centerLine = new THREE.Mesh(centerLineGeometry, lineMaterial);
   centerLine.position.set(0, 0.11, 0); // Position at the center of the court
+  centerLine.receiveShadow = true;
   scene.add(centerLine);
 
   // Add center circle using RingGeometry
@@ -161,6 +171,7 @@ function addLines() {
   const centerCircle = new THREE.Mesh(centerCircleGeometry, lineMaterial);
   centerCircle.rotation.x = -Math.PI / 2; // Lay flat
   centerCircle.position.set(0, 0.11, 0); // Slightly above court to avoid z-fighting
+  centerCircle.receiveShadow = true;
   scene.add(centerCircle);
 
 }
@@ -183,12 +194,14 @@ function addTPointLines () {
   const arcMesh = new THREE.Mesh(arcGeometry, arcMaterial);
   arcMesh.rotation.x = -Math.PI / 2; // Lay flat on court
   arcMesh.position.set(-13.5, 0.11, 0); // Adjust hoopX for baseline + offset
+  arcMesh.receiveShadow = true;
   scene.add(arcMesh);
 
   const arcMeshMirror = new THREE.Mesh(arcGeometry, arcMaterial);
   arcMeshMirror.rotation.x = -Math.PI / 2; // Flat on court
   arcMeshMirror.rotation.y = Math.PI;     // Face the opposite direction
   arcMeshMirror.position.set(13.5, 0.11, 0); // Opposite side of court
+  arcMeshMirror.receiveShadow = true;
   scene.add(arcMeshMirror);
 
   const lineLength = 2.5;      // Length of the line along X
@@ -205,18 +218,22 @@ function addTPointLines () {
   // Now these run along X instead of Z
   const leftLine = new THREE.Mesh(verticalGeometry, verticalMaterial);
   leftLine.position.set(-15 + lineLength / 2, 0.11, -6.69); // adjust Z to arc radius
+  leftLine.receiveShadow = true;
   scene.add(leftLine);
 
   const rightLine = new THREE.Mesh(verticalGeometry, verticalMaterial);
   rightLine.position.set(-15 + lineLength / 2, 0.11, 6.69); // mirror on Z
+  rightLine.receiveShadow = true;
   scene.add(rightLine);
 
   const leftLineMirror = new THREE.Mesh(verticalGeometry, verticalMaterial);
   leftLineMirror.position.set(15 - lineLength / 2, 0.11, -6.69);
+  leftLineMirror.receiveShadow = true;
   scene.add(leftLineMirror);
 
   const rightLineMirror = new THREE.Mesh(verticalGeometry, verticalMaterial);
   rightLineMirror.position.set(15 - lineLength / 2, 0.11, 6.69);
+  rightLineMirror.receiveShadow = true;
   scene.add(rightLineMirror);
 }
 
@@ -317,6 +334,7 @@ function addBasketBall2() {
     const basketball = new THREE.Mesh(ballGeometry, material);
     basketball.position.set(0, ballRadius + 0.1, 0);
     basketball.castShadow = true;
+    basketball.receiveShadow = true;
     scene.add(basketball);
   });
 }
@@ -363,6 +381,8 @@ function addBasketballHoops() {
       0
     );
     backboard.rotation.y = xSign * Math.PI/2;
+    backboard.castShadow = true;
+    backboard.receiveShadow = true;
     scene.add(backboard);
 
     //Rim
@@ -374,7 +394,9 @@ function addBasketballHoops() {
       hoopHeight,
       0
     );
-    
+
+    rim.castShadow = true;
+    rim.receiveShadow = true;
     scene.add(rim);
 
     // Net 
@@ -424,6 +446,8 @@ function addBasketballHoops() {
       netGroup.add(new THREE.Line(g,netMaterial))
     }
     
+    netGroup.castShadow = true;
+    netGroup.receiveShadow = true;
     scene.add(netGroup);
 
     // Pole
@@ -434,12 +458,16 @@ function addBasketballHoops() {
       poleHeight / 2,
       0
     );
+    pole.castShadow = true;
+    pole.receiveShadow = true;
     scene.add(pole);
 
     // Arm
     const armGeo = new THREE.BoxGeometry(armLength, 0.1, 0.1);
     const arm = new THREE.Mesh(armGeo, supportMaterial);
     arm.position.set(xSign * (halfCourt - poleRadius * 2 - 0.2), hoopHeight - 0.07,0);
+    arm.castShadow = true;
+    arm.receiveShadow = true;
     scene.add(arm);
   }
   
@@ -530,6 +558,8 @@ function createScoreboard() {
   const sprite = new THREE.Sprite(mat);
   sprite.scale.set(10, 4, 1);
   sprite.position.set(0, 8, -25);
+  sprite.castShadow = true;
+  sprite.receiveShadow = true;
   scene.add(sprite);
 }
 
