@@ -93,6 +93,8 @@ scene.add(spot2, spot2.target);
 // Enable shadows
 renderer.shadowMap.enabled = true;
 directionalLight.castShadow = true;
+spot.castShadow = true
+spot2.castShadow = true
 
 const d = 16
 const s = d * 1.2;
@@ -443,7 +445,9 @@ function addBasketballHoops() {
       const top = topPoints[i];
       const bottom = bottomPoints[(i-1+segments)%segments];
       const g = new THREE.BufferGeometry().setFromPoints([top, bottom]);
-      netGroup.add(new THREE.Line(g,netMaterial))
+      const line = new THREE.Line(g,netMaterial)
+      line.castShadow = true
+      netGroup.add(line)
     }
     
     netGroup.castShadow = true;
