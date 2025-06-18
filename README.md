@@ -18,3 +18,7 @@
 ## Technical Details
 - Run the server with: `node index.js`
 - Access at http://localhost:8000 in your web browser
+
+
+https://github.com/user-attachments/assets/e7a7ae96-8724-4b50-ac67-83658aa683ba
+
