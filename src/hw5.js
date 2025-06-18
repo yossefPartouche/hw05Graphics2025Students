@@ -7,6 +7,27 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 
 document.body.appendChild(renderer.domElement);
 
+// — Physics constants
+const GRAVITY       = -9.8;
+const RESTITUTION   = 0.6; 
+const BALL_RADIUS   = 0.3;       
+const GROUND_Y      = BALL_RADIUS;
+
+// — State
+let ball;
+let ballLaunched    = false;
+let ballVelocity    = new THREE.Vector3();
+let lastTimestamp   = null;
+let RIM_RADIUS = 0.45;
+let RIM_CENTER;
+
+const moveSpeed   = 10;    // units/sec for Arrow movement
+const minPower    = 5;     // min launch speed (m/s)
+const maxPower    = 15;    // max launch speed (m/s)
+let shotPower     = 0.5;   // normalized [0–1], default 50%
+let shotAttempts  = 0;     // for future scoring/statistics
+const keyState    = {};    // track Arrow + W/S states
+
 // add sky background
 const size = 512;                        
 const skyCanvas = document.createElement('canvas');
@@ -338,6 +359,8 @@ function addBasketBall2() {
     basketball.castShadow = true;
     basketball.receiveShadow = true;
     scene.add(basketball);
+
+    ball = basketball
   });
 }
 
@@ -396,6 +419,8 @@ function addBasketballHoops() {
       hoopHeight,
       0
     );
+
+    RIM_CENTER = rim.position
 
     rim.castShadow = true;
     rim.receiveShadow = true;
@@ -594,23 +619,155 @@ instructionsElement.innerHTML = `
 `;
 document.body.appendChild(instructionsElement);
 
-// Handle key events
-function handleKeyDown(e) {
-  if (e.key === "o") {
-    isOrbitEnabled = !isOrbitEnabled;
+// — Launch function (call on Spacebar)
+function shootBall(power, targetHoopCenter) {
+  // Compute direction toward hoop
+  const dir = new THREE.Vector3().subVectors(targetHoopCenter, ball.position).setY(0).normalize();
+  // Lift angle so it arcs:
+  const angle = Math.PI / 4;  
+  // Initial speeds
+  const speed = power;  // tune scale (e.g. power in m/s)
+  ballVelocity.copy(dir.multiplyScalar(Math.cos(angle) * speed));
+  ballVelocity.y = Math.sin(angle) * speed;
+  ballLaunched = true;
+}
+
+// — Rim collision: checks if ball passes through rim circle while descending
+function checkRimCollision() {
+  // Only register if ball is above and moving downward
+  if (ballVelocity.y < 0) {
+    const horizPos = ball.position.clone().setY(0);
+    const dist = horizPos.distanceTo(RIM_CENTER.clone().setY(0));
+    // If within rim radius ± ball radius, count as “through”
+    if (dist <= RIM_RADIUS - BALL_RADIUS) {
+      console.log("Score!"); 
+      // trigger score feedback
+      ballLaunched = false;
+      ballVelocity.set(0,0,0);
+    }
   }
 }
 
+// Create Power Display
+const uiContainer   = document.getElementById('uiContainer');
+const powerDisplay  = document.createElement('div');
+powerDisplay.id     = 'powerDisplay';
+powerDisplay.innerHTML = `<span class="icon">⚡</span>
+                          <span class="text">Power: 50%</span>`;
+uiContainer.appendChild(powerDisplay);
+
+function updatePowerUI() {
+  const pct = Math.round(shotPower * 100);
+  powerDisplay.querySelector('.text').textContent = `Power: ${pct}%`;
+}
+
+// Handle key events
+function handleKeyDown(e) {
+  console.log('Key pressed:', e.code, e.key);
+  switch (e.code) {
+    // ─ Arrow key movement
+    case 'ArrowLeft':  keyState.left  = true; break;
+    case 'ArrowRight': keyState.right = true; break;
+    case 'ArrowUp':    keyState.up    = true; break;
+    case 'ArrowDown':  keyState.down  = true; break;
+
+    // ─ Shot power adjust
+    case 'KeyW':
+      shotPower = Math.min(1, shotPower + 0.05);
+      updatePowerUI();
+      break;
+    case 'KeyS':
+      shotPower = Math.max(0, shotPower - 0.05);
+      updatePowerUI();
+      break;
+
+    // ─ Shoot
+    case 'Space':
+      if (!ballLaunched) {
+        // map normalized power → actual speed
+        const speed = minPower + shotPower * (maxPower - minPower);
+        shootBall(speed, RIM_CENTER);
+        shotAttempts += 1;
+      }
+      break;
+
+    // ─ Reset
+    case 'KeyR':
+      ballLaunched = false;
+      ballVelocity.set(0, 0, 0);
+      // center court:
+      ball.position.set(0, BALL_RADIUS + 0.01, 0);
+      shotPower = 0.5;
+      updatePowerUI();
+      break;
+    
+    case 'o':
+      isOrbitEnabled = !isOrbitEnabled;
+      break;
+  }
+}
+
+function handleKeyUp(e) {
+  switch (e.code) {
+    case 'ArrowLeft':  keyState.left  = false; break;
+    case 'ArrowRight': keyState.right = false; break;
+    case 'ArrowUp':    keyState.up    = false; break;
+    case 'ArrowDown':  keyState.down  = false; break;
+  }
+}
+
+
 document.addEventListener('keydown', handleKeyDown);
+document.addEventListener('keyup', handleKeyUp);
 
 // Animation function
-function animate() {
+function animate(timestamp) {
   requestAnimationFrame(animate);
-  
-  // Update controls
-  controls.enabled = isOrbitEnabled;
+  const dt = lastTimestamp !== null
+    ? (timestamp - lastTimestamp) / 1000
+    : 0;
+  lastTimestamp = timestamp;
+
+  // ── Handle Arrow-key movement
+  if (!ballLaunched) {
+    const dir = new THREE.Vector3(
+      (keyState.right ? 1 : 0) - (keyState.left  ? 1 : 0),
+      0,
+      (keyState.down  ? 1 : 0) - (keyState.up    ? 1 : 0)
+    );
+    if (dir.lengthSq() > 0) {
+      dir.normalize();
+      ball.position.addScaledVector(dir, moveSpeed * dt);
+      // clamp within court bounds (half-size 15×7.5 minus radius)
+      ball.position.x = THREE.MathUtils.clamp(
+        ball.position.x,
+        -15 + BALL_RADIUS,
+         15 - BALL_RADIUS
+      );
+      ball.position.z = THREE.MathUtils.clamp(
+        ball.position.z,
+        -7.5 + BALL_RADIUS,
+         7.5 - BALL_RADIUS
+      );
+    }
+  }
+
+  // ── Existing physics: gravity, bouncing, rim check
+  if (ballLaunched) {
+    ballVelocity.y += GRAVITY * dt;
+    ball.position.addScaledVector(ballVelocity, dt);
+    if (ball.position.y <= GROUND_Y) {
+      ball.position.y = GROUND_Y;
+      ballVelocity.y = -ballVelocity.y * RESTITUTION;
+      if (Math.abs(ballVelocity.y) < 0.5) {
+        ballVelocity.y = 0;
+        ballLaunched = false;
+      }
+    }
+    checkRimCollision();
+  }
+
   controls.update();
-  
   renderer.render(scene, camera);
 }
 
