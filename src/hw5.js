@@ -7,13 +7,6 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 
 document.body.appendChild(renderer.domElement);
 
-// --- Physics constants & state ---
-const GRAVITY = -9.8;                  // (scaled units)
-const RESTITUTION = 0.7;              // energy loss on bounce
-
-let ballVelocity = new THREE.Vector3();  // world‐space velocity
-let isShooting   = false;                // flight state
-
 // add sky background
 const size = 512;                        
 const skyCanvas = document.createElement('canvas');
