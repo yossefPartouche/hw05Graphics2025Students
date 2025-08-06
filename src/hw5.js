@@ -27,11 +27,15 @@ const MIN_POWER  = 0.0;
 const MAX_POWER  = 1.0;
 const MIN_SHOT_SPEED = 5;   // m/s at 0% power
 const MAX_SHOT_SPEED = 15;  // m/s at 100% power
+const RIM_TUBE_RADIUS = 0.02;
+const FRICTION = 0.8;
+const rimMeshes = []; // Array to store rim meshes for collision
 
 // — Shooting state & physics —
 let ballLaunched  = false;
 let ballVelocity  = new THREE.Vector3();
 const hoopCenters = [];
+
 
 // add sky background
 const size = 512;                        
@@ -352,8 +356,11 @@ function addBasketballHoops() {
 
     rim.castShadow = true;
     rim.receiveShadow = true;
-    hoopCenters.push(rim.position.clone());
+  
     scene.add(rim);
+
+    hoopCenters.push(rim.position.clone());
+    rimMeshes.push(rim);
 
     // Net 
     const netGroup = new THREE.Group();
@@ -680,14 +687,37 @@ function animate() {
     } else {
       // apply gravity
       ballVelocity.y += GRAVITY * delta;
+      
       // move ball by its velocity vector
       ball.position.addScaledVector(ballVelocity, delta);
+      
+      // Ground collision
+      if (ball.position.y <= BALL_RADIUS) {
+        ball.position.y      = BALL_RADIUS;
+        ballVelocity.y       = -ballVelocity.y * RESTITUTION;
+        ballVelocity.x      *= FRICTION;
+        ballVelocity.z      *= FRICTION;
+      }
+
+      // Rim collision
+      rimMeshes.forEach(rim => {
+        // vector from rim center to ball
+        const toBall = new THREE.Vector3().subVectors(ball.position, rim.position);
+        const dist   = toBall.length();
+        if (dist <= BALL_RADIUS + RIM_TUBE_RADIUS) {
+          // reflect velocity about the collision normal
+          const normal = toBall.normalize();
+          const vDotN  = ballVelocity.dot(normal);
+          // v' = v - 2(v·n)n, then apply restitution
+          ballVelocity.addScaledVector(normal, -2 * vDotN);
+          ballVelocity.multiplyScalar(RESTITUTION);
+        }
+      });
     }
   }
 
   controls.enabled = isOrbitEnabled;
   controls.update();
-
   renderer.render(scene, camera);
 }
 
