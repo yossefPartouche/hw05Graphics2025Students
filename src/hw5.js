@@ -44,6 +44,7 @@ let totalScore = 0;
 let hasScoredThisShot = false;
 let prevBallY = BALL_RADIUS + 0.1;
 let currentHoop = null;
+let scoreSprite, scoreTexture, scoreCanvas, scoreCtx;
 
 // add sky background
 const size = 512;                        
@@ -492,48 +493,40 @@ function createBleachers() {
   }
 }
 
-function makeScoreTexture(text) {
-  // first measure how wide the text will be
-  const temp = document.createElement('canvas');
-  const tctx = temp.getContext('2d');
-  tctx.font = 'bold 200px Arial';
-  const textWidth = tctx.measureText(text).width;
-
-  // add padding on each side
+function createScoreboard() {
+  // Create a persistent canvas
+  scoreCanvas = document.createElement('canvas');
   const padding = 50;
-  const width  = Math.ceil(textWidth + padding*2);
-  const height = 300;
+  scoreCanvas.width  = 200; 
+  scoreCanvas.height = 100;
+  scoreCtx = scoreCanvas.getContext('2d');
 
-  const canvas = document.createElement('canvas');
-  canvas.width  = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
+  // Draw initial text
+  drawScoreOnCanvas("00 : 00");
 
-  // background
-  ctx.fillStyle = 'black';
-  ctx.fillRect(0, 0, width, height);
+  scoreTexture = new THREE.CanvasTexture(scoreCanvas);
+  scoreTexture.needsUpdate = true;
 
-  // draw centered
-  ctx.font         = 'bold 200px Arial';
-  ctx.fillStyle    = 'lime';
-  ctx.textAlign    = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(text, width/2, height/2);
-
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.needsUpdate = true;
-  return tex;
+  // Create sprite
+  const mat = new THREE.SpriteMaterial({ map: scoreTexture });
+  scoreSprite = new THREE.Sprite(mat);
+  scoreSprite.scale.set(10, 4, 1);
+  scoreSprite.position.set(0, 8, -25);
+  scene.add(scoreSprite);
 }
 
-function createScoreboard() {
-  const tex = makeScoreTexture('00 : 00');
-  const mat = new THREE.SpriteMaterial({ map: tex });
-  const sprite = new THREE.Sprite(mat);
-  sprite.scale.set(10, 4, 1);
-  sprite.position.set(0, 8, -25);
-  sprite.castShadow = true;
-  sprite.receiveShadow = true;
-  scene.add(sprite);
+function drawScoreOnCanvas(text) {
+  const w = scoreCanvas.width, h = scoreCanvas.height;
+  // background
+  scoreCtx.fillStyle = 'black';
+  scoreCtx.fillRect(0, 0, w, h);
+
+  // text
+  scoreCtx.font         = 'bold 48px Arial';
+  scoreCtx.fillStyle    = 'lime';
+  scoreCtx.textAlign    = 'center';
+  scoreCtx.textBaseline = 'middle';
+  scoreCtx.fillText(text, w/2, h/2);
 }
 
 // Create all elements
@@ -551,7 +544,9 @@ const controls = new OrbitControls(camera, renderer.domElement);
 const instructionsElement = document.createElement('div');
 instructionsElement.style.position = 'absolute';
 instructionsElement.style.bottom = '20px';
-instructionsElement.style.left = '20px';
+instructionsElement.style.left   = '20px';
+instructionsElement.style.top    = 'auto';
+instructionsElement.style.right  = 'auto';
 instructionsElement.style.color = 'white';
 instructionsElement.style.fontSize = '16px';
 instructionsElement.style.fontFamily = 'Arial, sans-serif';
@@ -560,19 +555,38 @@ instructionsElement.innerHTML = `
   <h3>Controls:</h3>
   <p>O - Toggle orbit camera</p>
 `;
+instructionsElement.innerHTML = `
+  <h3 style="margin:0 0 5px;">Controls</h3>
+  <ul style="list-style:none; padding:0; margin:0; line-height:1.5;">
+    <li>⬅️/➡️/⬆️/⬇️ : Move ball</li>
+    <li>🔋 W / S     : Adjust power</li>
+    <li>🚀 Space     : Shoot</li>
+    <li>🔄 R         : Reset</li>
+    <li>📷 O         : Camera</li>
+  </ul>
+`;
+
+instructionsElement.style.background   = 'rgba(0, 0, 0, 0.6)';
+instructionsElement.style.padding      = '10px 15px';
+instructionsElement.style.borderRadius = '8px';
+instructionsElement.style.boxShadow    = '0 0 10px rgba(0,0,0,0.5)';
+instructionsElement.style.lineHeight   = '1.4';
 document.body.appendChild(instructionsElement);
 
 // Power UI
 const powerContainer = document.createElement('div');
 powerContainer.style.position = 'absolute';
-powerContainer.style.bottom   = '60px';
+powerContainer.style.bottom   = '200px';
 powerContainer.style.left     = '20px';
 powerContainer.style.width    = '200px';
 powerContainer.style.height   = '20px';
 powerContainer.style.border   = '2px solid white';
-powerContainer.style.background = 'rgba(0,0,0,0.5)';
+powerContainer.style.background = 'rgba(0,0,0,0.6)';
+powerContainer.style.borderRadius = '6px';
+powerContainer.style.boxShadow = '0 0 8px rgba(0,0,0,0.4)';
 
 const powerBar = document.createElement('div');
+powerBar.id = 'powerBar';
 powerBar.style.height = '100%';
 powerBar.style.width  = `${shotPower * 100}%`; 
 powerBar.style.background = 'lime';
@@ -580,8 +594,20 @@ powerBar.style.background = 'lime';
 powerContainer.appendChild(powerBar);
 document.body.appendChild(powerContainer);
 
+const powerLabel = document.createElement('div');
+powerLabel.style.position    = 'absolute';
+powerLabel.style.bottom      = '204px';
+powerLabel.style.left        = '30px';
+powerLabel.style.color       = 'white';
+powerLabel.style.fontSize    = '14px';
+powerLabel.style.fontFamily  = 'Arial, sans-serif';
+powerLabel.innerText         = `Power: ${(shotPower * 100).toFixed(0)}%`;
+document.body.appendChild(powerLabel);
+
 function updatePowerUI() {
-  powerBar.style.width = `${(shotPower * 100).toFixed(0)}%`;
+  const pct = Math.round(shotPower * 100);
+  powerBar.style.width  = `${pct}%`;
+  powerLabel.innerText  = `Power: ${pct}%`;
 }
 
 function computeShotSpeed() {
@@ -591,17 +617,26 @@ function computeShotSpeed() {
 // ── Stats UI ──
 const statsContainer = document.createElement('div');
 statsContainer.style.position = 'absolute';
-statsContainer.style.top      = '20px';
-statsContainer.style.right    = '20px';
+statsContainer.style.top    = '20px';
+statsContainer.style.right  = '20px';
+statsContainer.style.left   = 'auto';
+statsContainer.style.bottom = 'auto';
 statsContainer.style.color    = 'white';
 statsContainer.style.fontSize = '16px';
 statsContainer.style.fontFamily = 'Arial, sans-serif';
 statsContainer.innerHTML = `
   <div>Score: <span id="score">0</span></div>
-  <div>Shots: <span id="attempts">0</span></div>
+  <div>Attempts: <span id="attempts">0</span></div>
   <div>Made: <span id="made">0</span></div>
   <div>Accuracy: <span id="accuracy">0%</span></div>
 `;
+statsContainer.style.background    = 'rgba(0, 0, 0, 0.6)';
+statsContainer.style.padding       = '10px 15px';
+statsContainer.style.borderRadius  = '8px';
+statsContainer.style.boxShadow     = '0 0 10px rgba(0,0,0,0.5)';
+statsContainer.style.lineHeight    = '1.4';
+statsContainer.style.textAlign     = 'left';
+
 document.body.appendChild(statsContainer);
 
 function updateStatsUI() {
@@ -612,6 +647,12 @@ function updateStatsUI() {
     ? Math.round((shotsMade / shotAttempts) * 100)
     : 0;
   document.getElementById('accuracy').innerText = `${pct}%`;
+  // update the canvas scoreboard:
+  const minutes = String(Math.floor(totalScore/60)).padStart(2,'0');
+  const seconds = String(totalScore % 60).padStart(2,'0');
+  const newText = `${minutes} : ${seconds}`;  // or `${totalScore}` if you just want points
+  drawScoreOnCanvas(newText);
+  scoreTexture.needsUpdate = true;
 }
 
 // ── Message UI ──
@@ -627,13 +668,24 @@ messageEl.style.fontSize   = '18px';
 messageEl.style.fontFamily = 'Arial, sans-serif';
 messageEl.style.opacity    = '0';
 messageEl.style.transition = 'opacity 0.5s';
+messageEl.style.background = '#ffd700';   // gold for visibility
+messageEl.style.color      = '#000';      // black text
+messageEl.style.padding    = '8px 12px';
+messageEl.style.borderRadius = '6px';
+messageEl.style.boxShadow  = '0 0 8px rgba(0,0,0,0.4)';
+messageEl.style.fontWeight = 'bold';
+messageEl.style.top        = '50%';
+messageEl.style.left       = '50%';
+messageEl.style.transform  = 'translate(-50%, -50%)';
+
 document.body.appendChild(messageEl);
 
 let messageTimeout;
-function showMessage(text) {
+function showMessage(text, success = true) {
   clearTimeout(messageTimeout);
   messageEl.innerText = text;
-  messageEl.style.opacity = '1';
+  messageEl.style.background = success ? '#7CFC00' : '#FF4500';
+  messageEl.style.opacity    = '1';
   messageTimeout = setTimeout(() => {
     messageEl.style.opacity = '0';
   }, 2000);
@@ -832,11 +884,11 @@ function animate() {
           hasScoredThisShot = true;
           shotsMade++;
           totalScore += 2;
-          showMessage("🏀 SHOT MADE!");
+          showMessage("🏀 SHOT MADE!", true);
           updateStatsUI();
         } else if (ball.position.y <= BALL_RADIUS) {
           hasScoredThisShot = true;  // end this attempt
-          showMessage("❌ MISSED SHOT");
+          showMessage("❌ MISSED SHOT", false);
         }
       }
       // store for next frame’s comparison
