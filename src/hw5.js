@@ -28,6 +28,11 @@ const MAX_POWER  = 1.0;
 const MIN_SHOT_SPEED = 5;   // m/s at 0% power
 const MAX_SHOT_SPEED = 15;  // m/s at 100% power
 
+// — Shooting state & physics —
+let ballLaunched  = false;
+let ballVelocity  = new THREE.Vector3();
+const hoopCenters = [];
+
 // add sky background
 const size = 512;                        
 const skyCanvas = document.createElement('canvas');
@@ -347,6 +352,7 @@ function addBasketballHoops() {
 
     rim.castShadow = true;
     rim.receiveShadow = true;
+    hoopCenters.push(rim.position.clone());
     scene.add(rim);
 
     // Net 
@@ -567,6 +573,52 @@ function computeShotSpeed() {
   return MIN_SHOT_SPEED + (MAX_SHOT_SPEED - MIN_SHOT_SPEED) * shotPower;
 }
 
+function shootBall() {
+  if (!ball || ballLaunched) return;
+
+  ballLaunched = true;
+
+  // 1) Choose nearest hoop
+  const target = hoopCenters.reduce(
+    (c0, c1) =>
+      ball.position.distanceToSquared(c1) < ball.position.distanceToSquared(c0)
+        ? c1
+        : c0,
+    hoopCenters[0]
+  );
+
+  // 2) Horizontal direction (X/Z)
+  const dir = new THREE.Vector3(
+    target.x - ball.position.x,
+    0,
+    target.z - ball.position.z
+  ).normalize();
+
+  // 3) Total shot speed from power
+  const speed = computeShotSpeed();
+
+  // 4) Compute “clearance” arc angle
+  const dxz     = Math.hypot(target.x - ball.position.x, target.z - ball.position.z);
+  const apexH   = target.y + 1.0;          // 1 m above rim
+  const angle   = Math.atan2(apexH - ball.position.y, dxz);
+
+  // 5) Split into velocity components
+  ballVelocity.x = speed * Math.cos(angle) * dir.x;
+  ballVelocity.z = speed * Math.cos(angle) * dir.z;
+  ballVelocity.y = speed * Math.sin(angle);
+}
+
+function resetBall() {
+  if (!ball) return;
+  ballLaunched    = false;
+  ballVelocity.set(0, 0, 0);
+  shotPower       = 0.5;
+  updatePowerUI();
+  ball.position.set(0, BALL_RADIUS + 0.1, 0);
+}
+
+
+
 // Handle key events
 function handleKeyDown(e) {
   switch(e.key.toLowerCase()) {
@@ -583,6 +635,14 @@ function handleKeyDown(e) {
       shotPower = Math.max(MIN_POWER, shotPower - POWER_STEP);
       updatePowerUI();
       break;
+    
+    case ' ':
+      shootBall();
+      break;
+    
+    case 'r':
+      resetBall();
+      break;
 
     // spacebar, R, etc. will go here in later phases…
   }
@@ -598,28 +658,38 @@ document.addEventListener('keyup',    e => { keyState[e.key] = false; });
 // Animation function
 function animate() {
   requestAnimationFrame(animate);
-  const delta = clock.getDelta(); // seconds since last frame
-  const v = moveSpeed * delta; // distance to move this frame
+
+  // Get time since last frame
+  const delta = clock.getDelta();
+  const v = moveSpeed * delta;  
 
   if (ball) {
-    // horizontal (X) and depth (Z) movement
-    if (keyState['ArrowLeft'])  ball.position.x -= v;
-    if (keyState['ArrowRight']) ball.position.x += v;
-    if (keyState['ArrowUp'])    ball.position.z -= v;
-    if (keyState['ArrowDown'])  ball.position.z += v;
+    if (!ballLaunched) {
+      if (keyState['ArrowLeft'])  ball.position.x -= v;
+      if (keyState['ArrowRight']) ball.position.x += v;
+      if (keyState['ArrowUp'])    ball.position.z -= v;
+      if (keyState['ArrowDown'])  ball.position.z += v;
 
-    // boundary checking (court is 30×15: half-width=15, half-depth=7.5)
-    const r = BALL_RADIUS;
-    const maxX = 15 - r, minX = -15 + r;
-    const maxZ = 7.5 - r, minZ = -7.5 + r;
-    ball.position.x = THREE.MathUtils.clamp(ball.position.x, minX, maxX);
-    ball.position.z = THREE.MathUtils.clamp(ball.position.z, minZ, maxZ);
+      // clamp to court bounds
+      const r = BALL_RADIUS;
+      const maxX = 15 - r, minX = -15 + r;
+      const maxZ =  7.5 - r, minZ = -7.5 + r;
+      ball.position.x = THREE.MathUtils.clamp(ball.position.x, minX, maxX);
+      ball.position.z = THREE.MathUtils.clamp(ball.position.z, minZ, maxZ);
+
+    } else {
+      // apply gravity
+      ballVelocity.y += GRAVITY * delta;
+      // move ball by its velocity vector
+      ball.position.addScaledVector(ballVelocity, delta);
+    }
   }
 
-  // update controls & render
   controls.enabled = isOrbitEnabled;
   controls.update();
+
   renderer.render(scene, camera);
 }
+
 
 animate();
