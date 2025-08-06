@@ -21,6 +21,12 @@ let ball;
 let isOrbitEnabled = true;
 const keyState = {};
 const clock = new THREE.Clock();
+let shotPower    = 0.5; // 50% default
+const POWER_STEP = 0.02; // +/–2% per keypress
+const MIN_POWER  = 0.0;
+const MAX_POWER  = 1.0;
+const MIN_SHOT_SPEED = 5;   // m/s at 0% power
+const MAX_SHOT_SPEED = 15;  // m/s at 100% power
 
 // add sky background
 const size = 512;                        
@@ -535,14 +541,54 @@ instructionsElement.innerHTML = `
 `;
 document.body.appendChild(instructionsElement);
 
+const powerContainer = document.createElement('div');
+powerContainer.style.position = 'absolute';
+powerContainer.style.bottom   = '60px';
+powerContainer.style.left     = '20px';
+powerContainer.style.width    = '200px';
+powerContainer.style.height   = '20px';
+powerContainer.style.border   = '2px solid white';
+powerContainer.style.background = 'rgba(0,0,0,0.5)';
+
+const powerBar = document.createElement('div');
+powerBar.style.height = '100%';
+powerBar.style.width  = `${shotPower * 100}%`; 
+powerBar.style.background = 'lime';
+
+powerContainer.appendChild(powerBar);
+document.body.appendChild(powerContainer);
+
+// Call this whenever shotPower changes:
+function updatePowerUI() {
+  powerBar.style.width = `${(shotPower * 100).toFixed(0)}%`;
+}
+
+function computeShotSpeed() {
+  return MIN_SHOT_SPEED + (MAX_SHOT_SPEED - MIN_SHOT_SPEED) * shotPower;
+}
+
 // Handle key events
-function handleKeyToggle(e) {
-  if (e.key === "o") {
-    isOrbitEnabled = !isOrbitEnabled;
+function handleKeyDown(e) {
+  switch(e.key.toLowerCase()) {
+    case 'o':
+      isOrbitEnabled = !isOrbitEnabled;
+      break;
+
+    case 'w':
+      shotPower = Math.min(MAX_POWER, shotPower + POWER_STEP);
+      updatePowerUI();
+      break;
+
+    case 's':
+      shotPower = Math.max(MIN_POWER, shotPower - POWER_STEP);
+      updatePowerUI();
+      break;
+
+    // spacebar, R, etc. will go here in later phases…
   }
 }
 
-document.addEventListener('keydown', handleKeyToggle);
+document.addEventListener('keydown', handleKeyDown);
 
 // track arrow‐key presses for movement
 document.addEventListener('keydown',  e => { keyState[e.key] = true;  });
@@ -552,8 +598,8 @@ document.addEventListener('keyup',    e => { keyState[e.key] = false; });
 // Animation function
 function animate() {
   requestAnimationFrame(animate);
-  const delta = clock.getDelta();                  // seconds since last frame
-  const v = moveSpeed * delta;                     // distance to move this frame
+  const delta = clock.getDelta(); // seconds since last frame
+  const v = moveSpeed * delta; // distance to move this frame
 
   if (ball) {
     // horizontal (X) and depth (Z) movement
