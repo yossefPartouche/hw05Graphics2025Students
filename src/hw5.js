@@ -11,10 +11,10 @@ document.body.appendChild(renderer.domElement);
 const GRAVITY     = -9.8;
 const RESTITUTION = 0.6;
 const BALL_RADIUS = 0.3;
-const GROUND_Y    = BALL_RADIUS;
+const RIM_RADIUS = 0.45;
 
 // Movement constants
-const moveSpeed   = 10;
+const moveSpeed = 10;
 
 // Globals
 let ball;
@@ -30,12 +30,20 @@ const MAX_SHOT_SPEED = 15;  // m/s at 100% power
 const RIM_TUBE_RADIUS = 0.02;
 const FRICTION = 0.8;
 const rimMeshes = []; // Array to store rim meshes for collision
+const UP = new THREE.Vector3(0, 1, 0);
 
 // — Shooting state & physics —
-let ballLaunched  = false;
-let ballVelocity  = new THREE.Vector3();
+let ballLaunched = false;
+let ballVelocity = new THREE.Vector3();
 const hoopCenters = [];
 
+// ── Scoring globals ──
+let shotAttempts = 0;
+let shotsMade = 0;
+let totalScore = 0;
+let hasScoredThisShot = false;
+let prevBallY = BALL_RADIUS + 0.1;
+let currentHoop = null;
 
 // add sky background
 const size = 512;                        
@@ -554,6 +562,7 @@ instructionsElement.innerHTML = `
 `;
 document.body.appendChild(instructionsElement);
 
+// Power UI
 const powerContainer = document.createElement('div');
 powerContainer.style.position = 'absolute';
 powerContainer.style.bottom   = '60px';
@@ -571,7 +580,6 @@ powerBar.style.background = 'lime';
 powerContainer.appendChild(powerBar);
 document.body.appendChild(powerContainer);
 
-// Call this whenever shotPower changes:
 function updatePowerUI() {
   powerBar.style.width = `${(shotPower * 100).toFixed(0)}%`;
 }
@@ -580,12 +588,79 @@ function computeShotSpeed() {
   return MIN_SHOT_SPEED + (MAX_SHOT_SPEED - MIN_SHOT_SPEED) * shotPower;
 }
 
+// ── Stats UI ──
+const statsContainer = document.createElement('div');
+statsContainer.style.position = 'absolute';
+statsContainer.style.top      = '20px';
+statsContainer.style.right    = '20px';
+statsContainer.style.color    = 'white';
+statsContainer.style.fontSize = '16px';
+statsContainer.style.fontFamily = 'Arial, sans-serif';
+statsContainer.innerHTML = `
+  <div>Score: <span id="score">0</span></div>
+  <div>Shots: <span id="attempts">0</span></div>
+  <div>Made: <span id="made">0</span></div>
+  <div>Accuracy: <span id="accuracy">0%</span></div>
+`;
+document.body.appendChild(statsContainer);
+
+function updateStatsUI() {
+  document.getElementById('score').innerText    = totalScore;
+  document.getElementById('attempts').innerText = shotAttempts;
+  document.getElementById('made').innerText     = shotsMade;
+  const pct = shotAttempts > 0
+    ? Math.round((shotsMade / shotAttempts) * 100)
+    : 0;
+  document.getElementById('accuracy').innerText = `${pct}%`;
+}
+
+// ── Message UI ──
+const messageEl = document.createElement('div');
+messageEl.style.position   = 'absolute';
+messageEl.style.top        = '60px';
+messageEl.style.left       = '50%';
+messageEl.style.transform  = 'translateX(-50%)';
+messageEl.style.padding    = '10px 20px';
+messageEl.style.color      = 'black';
+messageEl.style.background = 'lime';
+messageEl.style.fontSize   = '18px';
+messageEl.style.fontFamily = 'Arial, sans-serif';
+messageEl.style.opacity    = '0';
+messageEl.style.transition = 'opacity 0.5s';
+document.body.appendChild(messageEl);
+
+let messageTimeout;
+function showMessage(text) {
+  clearTimeout(messageTimeout);
+  messageEl.innerText = text;
+  messageEl.style.opacity = '1';
+  messageTimeout = setTimeout(() => {
+    messageEl.style.opacity = '0';
+  }, 2000);
+}
+
 function shootBall() {
   if (!ball || ballLaunched) return;
 
+  // mark this shot attempt  
+  shotAttempts++;
+  hasScoredThisShot = false;
+  updateStatsUI();
+
+  // 2) Pick & record the nearest hoop
+  currentHoop = hoopCenters.reduce((c0, c1) =>
+    ball.position.distanceToSquared(c1) < ball.position.distanceToSquared(c0)
+      ? c1
+      : c0,
+    hoopCenters[0]
+  );
+
+  // 3) Initialize prevBallY for scoring logic
+  prevBallY   = ball.position.y;
+  
   ballLaunched = true;
 
-  // 1) Choose nearest hoop
+  // Choose nearest hoop
   const target = hoopCenters.reduce(
     (c0, c1) =>
       ball.position.distanceToSquared(c1) < ball.position.distanceToSquared(c0)
@@ -594,22 +669,22 @@ function shootBall() {
     hoopCenters[0]
   );
 
-  // 2) Horizontal direction (X/Z)
+  // Horizontal direction (X/Z)
   const dir = new THREE.Vector3(
     target.x - ball.position.x,
     0,
     target.z - ball.position.z
   ).normalize();
 
-  // 3) Total shot speed from power
+  // Total shot speed from power
   const speed = computeShotSpeed();
 
-  // 4) Compute “clearance” arc angle
+  // Compute “clearance” arc angle
   const dxz     = Math.hypot(target.x - ball.position.x, target.z - ball.position.z);
-  const apexH   = target.y + 1.0;          // 1 m above rim
+  const apexH   = target.y + 1.5; 
   const angle   = Math.atan2(apexH - ball.position.y, dxz);
 
-  // 5) Split into velocity components
+  // Split into velocity components
   ballVelocity.x = speed * Math.cos(angle) * dir.x;
   ballVelocity.z = speed * Math.cos(angle) * dir.z;
   ballVelocity.y = speed * Math.sin(angle);
@@ -623,8 +698,6 @@ function resetBall() {
   updatePowerUI();
   ball.position.set(0, BALL_RADIUS + 0.1, 0);
 }
-
-
 
 // Handle key events
 function handleKeyDown(e) {
@@ -684,6 +757,23 @@ function animate() {
       ball.position.x = THREE.MathUtils.clamp(ball.position.x, minX, maxX);
       ball.position.z = THREE.MathUtils.clamp(ball.position.z, minZ, maxZ);
 
+      // Compute horizontal move direction
+      const hDir = new THREE.Vector3(
+        (keyState['ArrowRight'] ? 1 : 0) - (keyState['ArrowLeft'] ? 1 : 0),
+        0,
+        (keyState['ArrowDown']  ? 1 : 0) - (keyState['ArrowUp']   ? 1 : 0)
+      );
+      
+      if (hDir.lengthSq() > 0) {
+        hDir.normalize();
+        // rotation axis = hDir × UP
+        const axis = new THREE.Vector3().crossVectors(hDir, UP).normalize();
+        // angular speed ω = v / r  (rad/sec)
+        const ω = moveSpeed / BALL_RADIUS;
+        // rotate by ω·delta
+        ball.rotateOnAxis(axis, ω * delta);
+      }
+
     } else {
       // apply gravity
       ballVelocity.y += GRAVITY * delta;
@@ -713,6 +803,44 @@ function animate() {
           ballVelocity.multiplyScalar(RESTITUTION);
         }
       });
+
+      if (ballVelocity.lengthSq() > 0) {
+        // direction of travel
+        const vDir = ballVelocity.clone().normalize();
+        // axis = vDir × UP
+        const axis = new THREE.Vector3().crossVectors(vDir, UP).normalize();
+        // angular speed from |v|/r
+        const ω    = ballVelocity.length() / BALL_RADIUS;
+        ball.rotateOnAxis(axis, ω * delta);
+      }
+
+      if (!hasScoredThisShot) {
+        // 1) Check downward motion through rim plane
+        const rimY = currentHoop.y;      
+        const prevYAbove = prevBallY > rimY;
+        const nowBelow = ball.position.y <= rimY;
+        const movingDown = ballVelocity.y < 0;
+
+        // 2) Horizontal proximity to center
+        const dx = ball.position.x - currentHoop.x;
+        const dz = ball.position.z - currentHoop.z;
+        const horizDist = Math.hypot(dx, dz);
+
+        // rimRadius from your createBasketballCourt()
+        if (prevYAbove && nowBelow && movingDown && horizDist <= RIM_RADIUS) {
+          // Successful shot!
+          hasScoredThisShot = true;
+          shotsMade++;
+          totalScore += 2;
+          showMessage("🏀 SHOT MADE!");
+          updateStatsUI();
+        } else if (ball.position.y <= BALL_RADIUS) {
+          hasScoredThisShot = true;  // end this attempt
+          showMessage("❌ MISSED SHOT");
+        }
+      }
+      // store for next frame’s comparison
+      prevBallY = ball.position.y;
     }
   }
 
