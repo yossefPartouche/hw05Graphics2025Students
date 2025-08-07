@@ -7,6 +7,57 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 
 document.body.appendChild(renderer.domElement);
 
+// Physics constants
+const GRAVITY     = -9.8;
+const RESTITUTION = 0.6;
+const BALL_RADIUS = 0.3;
+const RIM_RADIUS = 0.45;
+
+// Movement constants
+const moveSpeed = 10;
+
+// Globals
+let ball;
+let isOrbitEnabled = true;
+const keyState = {};
+const clock = new THREE.Clock();
+let shotPower    = 0.5; // 50% default
+const POWER_STEP = 0.02; // +/–2% per keypress
+const MIN_POWER  = 0.0;
+const MAX_POWER  = 1.0;
+const MIN_SHOT_SPEED = 5;   // m/s at 0% power
+const MAX_SHOT_SPEED = 15;  // m/s at 100% power
+const RIM_TUBE_RADIUS = 0.02;
+const FRICTION = 0.8;
+const rimMeshes = []; // Array to store rim meshes for collision
+const UP = new THREE.Vector3(0, 1, 0);
+
+// Shooting state & physics
+let ballLaunched = false;
+let ballVelocity = new THREE.Vector3();
+const hoopCenters = [];
+let trailSegments = [];
+
+// Scoring globals
+let shotAttempts = 0;
+let shotsMade = 0;
+let totalScore = 0;
+let hasScoredThisShot = false;
+let prevBallY = BALL_RADIUS + 0.1;
+let currentHoop = null;
+let scoreSprite, scoreTexture, scoreCanvas, scoreCtx;
+let comboStreak = 0;
+let comboBonus  = 0;
+
+// Game Mode Globals
+const MODE_FREE = 'free';
+const MODE_TIMED = 'timed';
+let gameMode = MODE_FREE;
+let gameRunning = false;
+
+const CHALLENGE_DURATION = 30; 
+let timeRemaining = CHALLENGE_DURATION;
+
 // add sky background
 const size = 512;                        
 const skyCanvas = document.createElement('canvas');
@@ -105,11 +156,6 @@ directionalLight.shadow.camera.bottom = -s;
 directionalLight.shadow.camera.near   =  0.5;
 directionalLight.shadow.camera.far    =  50;
 
-function degrees_to_radians(degrees) {
-  var pi = Math.PI;
-  return degrees * (pi/180);
-}
-
 const loader = new THREE.TextureLoader();
 
 // add wood floor
@@ -126,6 +172,21 @@ woodRough.encoding  = THREE.LinearEncoding;
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(8, 8);
 });
+
+// Create a material for the trail
+const trailMaterial = new THREE.LineBasicMaterial({
+  color: 0xFF6347,    
+  opacity: 0.6,        
+  linewidth: 2,      
+  transparent: true
+});
+
+const trailGeometry = new THREE.BufferGeometry();
+const trailPositions = new Float32Array(100 * 3);
+trailGeometry.setAttribute('position', new THREE.BufferAttribute(trailPositions, 3));
+trailGeometry.setDrawRange(0, 0);  
+const trailLine = new THREE.Line(trailGeometry, trailMaterial);
+scene.add(trailLine);
 
 // Create basketball court
 function createBasketballCourt() {
@@ -148,6 +209,7 @@ function createBasketballCourt() {
   addBasketBall2();
   createBleachers();
   createScoreboard();
+  
 }
 
 function addLines() {
@@ -239,82 +301,6 @@ function addTPointLines () {
   scene.add(rightLineMirror);
 }
 
-function addBasketBall1() {
-  const ballRadius  = 0.3;
-  const ballGeometry = new THREE.SphereGeometry(ballRadius, 64, 64);
-  const textureLoader = new THREE.TextureLoader();
-
-  // Create an off-screen canvas
-  const canvas = document.createElement('canvas');
-  canvas.width = 1024;
-  canvas.height = 512;
-  const ctx = canvas.getContext('2d');
-
-  // Load the leather color image first
-  textureLoader.load(
-    '/textures/Leather/Leather_Color.jpg',
-    leatherTex => {
-      // draw the leather onto canvas
-      ctx.drawImage(leatherTex.image, 0, 0, canvas.width, canvas.height);
-
-      // Overlay  black seams
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth   = 10;
-      ctx.lineCap     = 'round';
-
-      // vertical seams
-      for (let i = 0; i <= 6; i++) {
-        const x = (canvas.width / 6) * i;
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, canvas.height);
-        ctx.stroke();
-      }
-
-      // horizontal seam
-      //const centerY = canvas.height / 2;
-      //ctx.beginPath();
-      //ctx.moveTo(0, centerY);
-      //ctx.lineTo(canvas.width, centerY);
-      //ctx.stroke();
-
-      // Create a single composite texture from canvas
-      const compositeTex = new THREE.CanvasTexture(canvas);
-      compositeTex.wrapS   = THREE.RepeatWrapping;
-      compositeTex.wrapT   = THREE.RepeatWrapping;
-      compositeTex.encoding = THREE.sRGBEncoding;
-
-      // Load normal & roughness maps
-      const normalMap = textureLoader.load('/textures/Leather/Leather_Normal.jpg');
-      const roughMap  = textureLoader.load('/textures/Leather/Leather_Roughness.jpg');
-
-      // repeat them to match leather detail scale
-      [normalMap, roughMap].forEach(tex => {
-        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-        tex.repeat.set(8, 8);
-        tex.encoding = THREE.LinearEncoding;
-      });
-
-      // Build the material using composite + PBR maps
-      const material = new THREE.MeshPhongMaterial({
-        map:          compositeTex,
-        normalMap:    normalMap,
-        roughnessMap: roughMap,
-        roughness:    0.6,
-        metalness:    0.1
-      });
-
-      // Create & add the mesh
-      const basketball = new THREE.Mesh(ballGeometry, material);
-      basketball.position.set(0, ballRadius + 0.1, 0);
-      basketball.castShadow = true;
-      scene.add(basketball);
-    },
-    undefined,
-    err => console.error('Failed to load leather texture:', err)
-  );
-}
-
 function addBasketBall2() {
   const ballRadius = 0.3;
   const ballGeometry = new THREE.SphereGeometry(ballRadius, 128, 128);
@@ -337,6 +323,9 @@ function addBasketBall2() {
     basketball.position.set(0, ballRadius + 0.1, 0);
     basketball.castShadow = true;
     basketball.receiveShadow = true;
+
+    ball = basketball;
+
     scene.add(basketball);
   });
 }
@@ -399,7 +388,11 @@ function addBasketballHoops() {
 
     rim.castShadow = true;
     rim.receiveShadow = true;
+  
     scene.add(rim);
+
+    hoopCenters.push(rim.position.clone());
+    rimMeshes.push(rim);
 
     // Net 
     const netGroup = new THREE.Group();
@@ -523,48 +516,40 @@ function createBleachers() {
   }
 }
 
-function makeScoreTexture(text) {
-  // first measure how wide the text will be
-  const temp = document.createElement('canvas');
-  const tctx = temp.getContext('2d');
-  tctx.font = 'bold 200px Arial';
-  const textWidth = tctx.measureText(text).width;
-
-  // add padding on each side
+function createScoreboard() {
+  // Create a persistent canvas
+  scoreCanvas = document.createElement('canvas');
   const padding = 50;
-  const width  = Math.ceil(textWidth + padding*2);
-  const height = 300;
+  scoreCanvas.width  = 200; 
+  scoreCanvas.height = 100;
+  scoreCtx = scoreCanvas.getContext('2d');
 
-  const canvas = document.createElement('canvas');
-  canvas.width  = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
+  // Draw initial text
+  drawScoreOnCanvas("00 : 00");
 
-  // background
-  ctx.fillStyle = 'black';
-  ctx.fillRect(0, 0, width, height);
+  scoreTexture = new THREE.CanvasTexture(scoreCanvas);
+  scoreTexture.needsUpdate = true;
 
-  // draw centered
-  ctx.font         = 'bold 200px Arial';
-  ctx.fillStyle    = 'lime';
-  ctx.textAlign    = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(text, width/2, height/2);
-
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.needsUpdate = true;
-  return tex;
+  // Create sprite
+  const mat = new THREE.SpriteMaterial({ map: scoreTexture });
+  scoreSprite = new THREE.Sprite(mat);
+  scoreSprite.scale.set(10, 4, 1);
+  scoreSprite.position.set(0, 8, -25);
+  scene.add(scoreSprite);
 }
 
-function createScoreboard() {
-  const tex = makeScoreTexture('00 : 00');
-  const mat = new THREE.SpriteMaterial({ map: tex });
-  const sprite = new THREE.Sprite(mat);
-  sprite.scale.set(10, 4, 1);
-  sprite.position.set(0, 8, -25);
-  sprite.castShadow = true;
-  sprite.receiveShadow = true;
-  scene.add(sprite);
+function drawScoreOnCanvas(text) {
+  const w = scoreCanvas.width, h = scoreCanvas.height;
+  // background
+  scoreCtx.fillStyle = 'black';
+  scoreCtx.fillRect(0, 0, w, h);
+
+  // text
+  scoreCtx.font         = 'bold 48px Arial';
+  scoreCtx.fillStyle    = 'lime';
+  scoreCtx.textAlign    = 'center';
+  scoreCtx.textBaseline = 'middle';
+  scoreCtx.fillText(text, w/2, h/2);
 }
 
 // Create all elements
@@ -577,41 +562,444 @@ camera.applyMatrix4(cameraTranslate);
 
 // Orbit controls
 const controls = new OrbitControls(camera, renderer.domElement);
-let isOrbitEnabled = true;
 
-// Instructions display
-const instructionsElement = document.createElement('div');
-instructionsElement.style.position = 'absolute';
-instructionsElement.style.bottom = '20px';
-instructionsElement.style.left = '20px';
-instructionsElement.style.color = 'white';
-instructionsElement.style.fontSize = '16px';
-instructionsElement.style.fontFamily = 'Arial, sans-serif';
-instructionsElement.style.textAlign = 'left';
-instructionsElement.innerHTML = `
-  <h3>Controls:</h3>
-  <p>O - Toggle orbit camera</p>
+const hud = document.createElement('div');
+hud.classList.add('hud-container');
+document.body.appendChild(hud);
+
+// Stats panel
+const statsPanel = document.createElement('div');
+statsPanel.classList.add('hud-panel');
+statsPanel.innerHTML = `
+  <div>Score: <span id="score">0</span></div>
+  <div>Attempts: <span id="attempts">0</span></div>
+  <div>Made: <span id="made">0</span></div>
+  <div>Accuracy: <span id="accuracy">0%</span></div>
+  <div>Combo: <span id="combo">0</span></div>
 `;
-document.body.appendChild(instructionsElement);
+hud.appendChild(statsPanel);
+
+// Power bar panel
+const powerPanel = document.createElement('div');
+powerPanel.classList.add('hud-panel');
+powerPanel.innerHTML = `
+  <div>Power</div>
+  <div class="progress-bar">
+    <div id="powerFill" class="progress-fill"></div>
+  </div>
+`;
+hud.appendChild(powerPanel);
+
+// Mode & start button
+const modePanel = document.createElement('div');
+modePanel.classList.add('hud-panel');
+modePanel.innerHTML = `
+  <label>
+    Mode:
+    <select id="modeSelect">
+      <option value="${MODE_FREE}">Free</option>
+      <option value="${MODE_TIMED}">Timed</option>
+    </select>
+  </label>
+  <button id="startBtn">Start</button>
+`;
+hud.appendChild(modePanel);
+
+// Timer panel (hidden by default)
+const timerPanel = document.createElement('div');
+timerPanel.classList.add('hud-panel');
+timerPanel.id = 'timerPanel';
+timerPanel.style.display = 'none';
+timerPanel.innerText = formatTime(timeRemaining);
+hud.appendChild(timerPanel);
+
+const timeContainer = timerPanel;
+
+// Instructions panel
+const instrPanel = document.createElement('div');
+instrPanel.classList.add('hud-panel', 'instructions');
+instrPanel.innerHTML = `
+  <h4>Controls</h4>
+  <ul>
+    <li>←/→/↑/↓ Move ball</li>
+    <li>W/S Adjust power</li>
+    <li>Space Shoot</li>
+    <li>R Reset</li>
+    <li>O Toggle camera</li>
+  </ul>
+`;
+hud.appendChild(instrPanel);
+
+document.getElementById('modeSelect').addEventListener('change', e => {
+  gameMode = e.target.value;
+  document.getElementById('timerPanel').style.display =
+    gameMode === MODE_TIMED ? 'block' : 'none';
+});
+document.getElementById('startBtn').addEventListener('click', startGame);
+
+// helpers
+function updatePowerUI() {
+  const pct = Math.round(shotPower * 100);
+  document.getElementById('powerFill').style.width = `${pct}%`;
+}
+
+function updateStatsUI() {
+  document.getElementById('score').innerText    = totalScore;
+  document.getElementById('attempts').innerText = shotAttempts;
+  document.getElementById('made').innerText     = shotsMade;
+  const pct = shotAttempts ? Math.round((shotsMade/shotAttempts)*100) : 0;
+  document.getElementById('accuracy').innerText = `${pct}%`;
+  document.getElementById('combo').innerText    = comboStreak;
+  // update the canvas scoreboard:
+  const minutes = String(Math.floor(totalScore/60)).padStart(2,'0');
+  const seconds = String(totalScore % 60).padStart(2,'0');
+  const newText = `${minutes} : ${seconds}`;
+  drawScoreOnCanvas(newText);
+  scoreTexture.needsUpdate = true;
+}
+
+function computeShotSpeed() {
+  return MIN_SHOT_SPEED + (MAX_SHOT_SPEED - MIN_SHOT_SPEED) * shotPower;
+}
+
+// ── Message UI ──
+const messageEl = document.createElement('div');
+messageEl.style.position   = 'absolute';
+messageEl.style.top        = '60px';
+messageEl.style.left       = '50%';
+messageEl.style.transform  = 'translateX(-50%)';
+messageEl.style.padding    = '10px 20px';
+messageEl.style.color      = 'black';
+messageEl.style.background = 'lime';
+messageEl.style.fontSize   = '18px';
+messageEl.style.fontFamily = 'Arial, sans-serif';
+messageEl.style.opacity    = '0';
+messageEl.style.transition = 'opacity 0.5s';
+messageEl.style.background = '#ffd700';  
+messageEl.style.color      = '#000';    
+messageEl.style.padding    = '8px 12px';
+messageEl.style.borderRadius = '6px';
+messageEl.style.boxShadow  = '0 0 8px rgba(0,0,0,0.4)';
+messageEl.style.fontWeight = 'bold';
+messageEl.style.top        = '50%';
+messageEl.style.left       = '50%';
+messageEl.style.transform  = 'translate(-50%, -50%)';
+
+document.body.appendChild(messageEl);
+
+let messageTimeout;
+
+function showMessage(text, success = true) {
+  clearTimeout(messageTimeout);
+  messageEl.innerText = text;
+  messageEl.style.background = success ? '#7CFC00' : '#FF4500';
+  messageEl.style.opacity    = '1';
+  messageTimeout = setTimeout(() => {
+    messageEl.style.opacity = '0';
+  }, 2000);
+}
+
+function formatTime(sec) {
+  const m = Math.floor(sec/60), s = Math.floor(sec % 60);
+  return `${m}:${s.toString().padStart(2,'0')}`;
+}
+
+function shootBall() {
+  if (!ball || ballLaunched) return;
+
+  // mark this shot attempt  
+  shotAttempts++;
+  hasScoredThisShot = false;
+  updateStatsUI();
+
+  // Pick & record the nearest hoop
+  currentHoop = hoopCenters.reduce((c0, c1) =>
+    ball.position.distanceToSquared(c1) < ball.position.distanceToSquared(c0)
+      ? c1
+      : c0,
+    hoopCenters[0]
+  );
+
+  // Initialize prevBallY for scoring logic
+  prevBallY   = ball.position.y;
+  
+  ballLaunched = true;
+
+  // Choose nearest hoop
+  const target = hoopCenters.reduce(
+    (c0, c1) =>
+      ball.position.distanceToSquared(c1) < ball.position.distanceToSquared(c0)
+        ? c1
+        : c0,
+    hoopCenters[0]
+  );
+
+  // Horizontal direction (X/Z)
+  const dir = new THREE.Vector3(
+    target.x - ball.position.x,
+    0,
+    target.z - ball.position.z
+  ).normalize();
+
+  // Total shot speed from power
+  const speed = computeShotSpeed();
+
+  // Compute “clearance” arc angle
+  const dxz     = Math.hypot(target.x - ball.position.x, target.z - ball.position.z);
+  const apexH   = target.y + 1.5; 
+  const angle   = Math.atan2(apexH - ball.position.y, dxz);
+
+  // Split into velocity components
+  ballVelocity.x = speed * Math.cos(angle) * dir.x;
+  ballVelocity.z = speed * Math.cos(angle) * dir.z;
+  ballVelocity.y = speed * Math.sin(angle);
+}
+
+function resetBall() {
+  if (!ball) return;
+  ballLaunched = false;
+  ballVelocity.set(0, 0, 0);
+  shotPower = 0.5;
+  updatePowerUI();
+  ball.position.set(0, BALL_RADIUS + 0.1, 0);
+  // clear the trail
+  trailSegments.length = 0;                     
+  trailGeometry.setDrawRange(0, 0);           
+  trailGeometry.attributes.position.needsUpdate = true;
+}
+
+// Called when “Start” is clicked
+document.getElementById('startBtn').addEventListener('click', startGame);
+
+function startGame() {
+  // reset stats & ball
+  shotAttempts = shotsMade = totalScore = comboStreak = comboBonus = 0;
+  updateStatsUI();
+  resetBall();     
+
+  if (gameMode === MODE_TIMED) {
+    timeRemaining = CHALLENGE_DURATION;
+    timeContainer.innerText = formatTime(timeRemaining);
+  }
+  gameRunning = true;
+}
+
+// Called when timer hits zero
+function endGame() {
+  gameRunning = false;
+  showMessage("⏱ TIME'S UP!", false);
+}
+
+
 
 // Handle key events
 function handleKeyDown(e) {
-  if (e.key === "o") {
+  e.preventDefault();
+  const key = e.key.toLowerCase();
+
+  // 1) Always allow these, even if game isn't started yet
+  if (key === 'o') {
     isOrbitEnabled = !isOrbitEnabled;
+    return;
+  }
+  if (key === 'w') {
+    shotPower = Math.min(MAX_POWER, shotPower + POWER_STEP);
+    updatePowerUI();
+    return;
+  }
+  if (key === 's') {
+    shotPower = Math.max(MIN_POWER, shotPower - POWER_STEP);
+    updatePowerUI();
+    return;
+  }
+
+  // 2) Otherwise, only process when the game is running
+  if (!gameRunning) return;
+
+  // 3) Movement keys
+  if (key === 'arrowleft' ||
+      key === 'arrowright'||
+      key === 'arrowup'   ||
+      key === 'arrowdown') {
+    keyState[e.key] = true;
+    return;
+  }
+
+  // 4) Other in-game actions
+  switch (key) {
+    case ' ':
+      shootBall();
+      break;
+    case 'r':
+      resetBall();
+      break;
   }
 }
 
 document.addEventListener('keydown', handleKeyDown);
 
+document.addEventListener('keyup', e => {
+  const key = e.key;
+  if (gameRunning && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(key)) {
+    keyState[key] = false;
+  }
+});
+
 // Animation function
 function animate() {
   requestAnimationFrame(animate);
-  
-  // Update controls
+
+  // Get time since last frame
+  const delta = clock.getDelta();
+  if (gameRunning && gameMode === MODE_TIMED) {
+    timeRemaining -= delta;
+    if (timeRemaining <= 0) {
+      timeRemaining = 0;
+      timeContainer.innerText = formatTime(0);
+      endGame();
+    } else {
+      timeContainer.innerText = formatTime(timeRemaining);
+    }
+  }
+
+  const v = moveSpeed * delta;  
+
+  if (ball) {
+    if (!ballLaunched) {
+      if (keyState['ArrowLeft'])  ball.position.x -= v;
+      if (keyState['ArrowRight']) ball.position.x += v;
+      if (keyState['ArrowUp'])    ball.position.z -= v;
+      if (keyState['ArrowDown'])  ball.position.z += v;
+
+      // clamp to court bounds
+      const r = BALL_RADIUS;
+      const maxX = 15 - r, minX = -15 + r;
+      const maxZ =  7.5 - r, minZ = -7.5 + r;
+      ball.position.x = THREE.MathUtils.clamp(ball.position.x, minX, maxX);
+      ball.position.z = THREE.MathUtils.clamp(ball.position.z, minZ, maxZ);
+
+      // Compute horizontal move direction
+      const hDir = new THREE.Vector3(
+        (keyState['ArrowRight'] ? 1 : 0) - (keyState['ArrowLeft'] ? 1 : 0),
+        0,
+        (keyState['ArrowDown']  ? 1 : 0) - (keyState['ArrowUp']   ? 1 : 0)
+      );
+      
+      if (hDir.lengthSq() > 0) {
+        hDir.normalize();
+        // rotation axis = hDir × UP
+        const axis = new THREE.Vector3().crossVectors(hDir, UP).normalize();
+        // angular speed ω = v / r  (rad/sec)
+        const ω = moveSpeed / BALL_RADIUS;
+        // rotate by ω·delta
+        ball.rotateOnAxis(axis, ω * delta);
+      }
+
+    } else {
+      // apply gravity
+      ballVelocity.y += GRAVITY * delta;
+      
+      // move ball by its velocity vector
+      ball.position.addScaledVector(ballVelocity, delta);
+
+      // ── Ball Trail Effect ──
+      if (trailSegments.length < 100) {
+        // Add a new trail segment (each time ball moves)
+        const pos = new THREE.Vector3().copy(ball.position);
+        trailPositions.set([pos.x, pos.y, pos.z], trailSegments.length * 3);
+        trailSegments.push(pos);
+      } else {
+        // Shift positions to keep the trail length fixed
+        trailPositions.set([ball.position.x, ball.position.y, ball.position.z], 0);
+        trailSegments.shift();
+        for (let i = 0; i < trailSegments.length; i++) {
+          trailPositions.set([trailSegments[i].x, trailSegments[i].y, trailSegments[i].z], i * 3);
+        }
+      }
+      
+      trailGeometry.setDrawRange(0, trailSegments.length);
+      trailGeometry.attributes.position.needsUpdate = true;
+      
+      // Ground collision
+      if (ball.position.y <= BALL_RADIUS) {
+        ball.position.y      = BALL_RADIUS;
+        ballVelocity.y       = -ballVelocity.y * RESTITUTION;
+        ballVelocity.x      *= FRICTION;
+        ballVelocity.z      *= FRICTION;
+      }
+
+      // Rim collision
+      rimMeshes.forEach(rim => {
+        // vector from rim center to ball
+        const toBall = new THREE.Vector3().subVectors(ball.position, rim.position);
+        const dist   = toBall.length();
+        if (dist <= BALL_RADIUS + RIM_TUBE_RADIUS) {
+          // reflect velocity about the collision normal
+          const normal = toBall.normalize();
+          const vDotN  = ballVelocity.dot(normal);
+          // v' = v - 2(v·n)n, then apply restitution
+          ballVelocity.addScaledVector(normal, -2 * vDotN);
+          ballVelocity.multiplyScalar(RESTITUTION);
+        }
+      });
+
+      if (ballVelocity.lengthSq() > 0) {
+        // direction of travel
+        const vDir = ballVelocity.clone().normalize();
+        // axis = vDir × UP
+        const axis = new THREE.Vector3().crossVectors(vDir, UP).normalize();
+        // angular speed from |v|/r
+        const ω    = ballVelocity.length() / BALL_RADIUS;
+        ball.rotateOnAxis(axis, ω * delta);
+      }
+
+      if (!hasScoredThisShot) {
+        // 1) Check downward motion through rim plane
+        const rimY = currentHoop.y;      
+        const prevYAbove = prevBallY > rimY;
+        const nowBelow = ball.position.y <= rimY;
+        const movingDown = ballVelocity.y < 0;
+
+        // 2) Horizontal proximity to center
+        const dx = ball.position.x - currentHoop.x;
+        const dz = ball.position.z - currentHoop.z;
+        const horizDist = Math.hypot(dx, dz);
+
+        // rimRadius from your createBasketballCourt()
+        if (prevYAbove && nowBelow && movingDown && horizDist <= RIM_RADIUS) {
+          // Successful shot
+          hasScoredThisShot = true;
+          shotsMade++;
+          // bump up streak & compute bonus
+          comboStreak++;
+          comboBonus = comboStreak - 1;          
+          // award base points + bonus
+          totalScore += 2 + comboBonus;
+          if (comboBonus > 0) {
+            showMessage(`🏀 SHOT MADE! Combo ${comboStreak} (+${comboBonus})`, true);
+          } else {
+            showMessage(`🏀 SHOT MADE!`, true);
+          }
+          updateStatsUI();
+        } else if (ball.position.y <= BALL_RADIUS) {
+          hasScoredThisShot = true;  // end this attempt
+          showMessage("❌ MISSED SHOT", false);
+
+          // reset combo
+          comboStreak = 0;
+          comboBonus  = 0;
+          updateStatsUI();
+        }
+      }
+      // store for next frame’s comparison
+      prevBallY = ball.position.y;
+    }
+  }
+
   controls.enabled = isOrbitEnabled;
   controls.update();
-  
   renderer.render(scene, camera);
 }
+
 
 animate();
