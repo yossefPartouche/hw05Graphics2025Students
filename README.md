@@ -9,6 +9,7 @@
 2. Make sure you have Node.js installed
 3. Start the local web server: `node index.js`
 4. Open your browser and go to http://localhost:8000
+5. Select **Free** or **Timed (30 s)** mode and then press **Start**
 
 ## Controls
 - **←/→/↑/↓** : Move ball on court (before shooting)  
