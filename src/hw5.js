@@ -36,6 +36,7 @@ const UP = new THREE.Vector3(0, 1, 0);
 let ballLaunched = false;
 let ballVelocity = new THREE.Vector3();
 const hoopCenters = [];
+let trailSegments = [];
 
 // ── Scoring globals ──
 let shotAttempts = 0;
@@ -168,6 +169,21 @@ woodRough.encoding  = THREE.LinearEncoding;
   tex.repeat.set(8, 8);
 });
 
+// Create a material for the trail
+const trailMaterial = new THREE.LineBasicMaterial({
+  color: 0xFF6347,    
+  opacity: 0.6,        
+  linewidth: 2,      
+  transparent: true
+});
+
+const trailGeometry = new THREE.BufferGeometry();
+const trailPositions = new Float32Array(100 * 3);
+trailGeometry.setAttribute('position', new THREE.BufferAttribute(trailPositions, 3));
+trailGeometry.setDrawRange(0, 0);  
+const trailLine = new THREE.Line(trailGeometry, trailMaterial);
+scene.add(trailLine);
+
 // Create basketball court
 function createBasketballCourt() {
   const courtGeometry = new THREE.BoxGeometry(30, 0.2, 15);
@@ -189,6 +205,7 @@ function createBasketballCourt() {
   addBasketBall2();
   createBleachers();
   createScoreboard();
+  
 }
 
 function addLines() {
@@ -654,7 +671,7 @@ function updateStatsUI() {
   // update the canvas scoreboard:
   const minutes = String(Math.floor(totalScore/60)).padStart(2,'0');
   const seconds = String(totalScore % 60).padStart(2,'0');
-  const newText = `${minutes} : ${seconds}`;  // or `${totalScore}` if you just want points
+  const newText = `${minutes} : ${seconds}`;
   drawScoreOnCanvas(newText);
   scoreTexture.needsUpdate = true;
 }
@@ -672,8 +689,8 @@ messageEl.style.fontSize   = '18px';
 messageEl.style.fontFamily = 'Arial, sans-serif';
 messageEl.style.opacity    = '0';
 messageEl.style.transition = 'opacity 0.5s';
-messageEl.style.background = '#ffd700';   // gold for visibility
-messageEl.style.color      = '#000';      // black text
+messageEl.style.background = '#ffd700';  
+messageEl.style.color      = '#000';    
 messageEl.style.padding    = '8px 12px';
 messageEl.style.borderRadius = '6px';
 messageEl.style.boxShadow  = '0 0 8px rgba(0,0,0,0.4)';
@@ -748,12 +765,17 @@ function shootBall() {
 
 function resetBall() {
   if (!ball) return;
-  ballLaunched    = false;
+  ballLaunched = false;
   ballVelocity.set(0, 0, 0);
-  shotPower       = 0.5;
+  shotPower = 0.5;
   updatePowerUI();
   ball.position.set(0, BALL_RADIUS + 0.1, 0);
+  // clear the trail
+  trailSegments.length = 0;                     
+  trailGeometry.setDrawRange(0, 0);           
+  trailGeometry.attributes.position.needsUpdate = true;
 }
+
 
 // Handle key events
 function handleKeyDown(e) {
@@ -779,8 +801,6 @@ function handleKeyDown(e) {
     case 'r':
       resetBall();
       break;
-
-    // spacebar, R, etc. will go here in later phases…
   }
 }
 
@@ -836,6 +856,24 @@ function animate() {
       
       // move ball by its velocity vector
       ball.position.addScaledVector(ballVelocity, delta);
+
+      // ── Ball Trail Effect ──
+      if (trailSegments.length < 100) {
+        // Add a new trail segment (each time ball moves)
+        const pos = new THREE.Vector3().copy(ball.position);
+        trailPositions.set([pos.x, pos.y, pos.z], trailSegments.length * 3);
+        trailSegments.push(pos);
+      } else {
+        // Shift positions to keep the trail length fixed
+        trailPositions.set([ball.position.x, ball.position.y, ball.position.z], 0);
+        trailSegments.shift();
+        for (let i = 0; i < trailSegments.length; i++) {
+          trailPositions.set([trailSegments[i].x, trailSegments[i].y, trailSegments[i].z], i * 3);
+        }
+      }
+      
+      trailGeometry.setDrawRange(0, trailSegments.length);
+      trailGeometry.attributes.position.needsUpdate = true;
       
       // Ground collision
       if (ball.position.y <= BALL_RADIUS) {
@@ -884,7 +922,7 @@ function animate() {
 
         // rimRadius from your createBasketballCourt()
         if (prevYAbove && nowBelow && movingDown && horizDist <= RIM_RADIUS) {
-          // Successful shot!
+          // Successful shot
           hasScoredThisShot = true;
           shotsMade++;
           // bump up streak & compute bonus
