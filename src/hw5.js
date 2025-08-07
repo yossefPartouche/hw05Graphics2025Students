@@ -55,11 +55,8 @@ const MODE_TIMED = 'timed';
 let gameMode = MODE_FREE;
 let gameRunning = false;
 
-const CHALLENGE_DURATION = 60; 
+const CHALLENGE_DURATION = 30; 
 let timeRemaining = CHALLENGE_DURATION;
-
-// timer UI element
-let timeContainer;
 
 // add sky background
 const size = 512;                        
@@ -158,11 +155,6 @@ directionalLight.shadow.camera.top    =  s;
 directionalLight.shadow.camera.bottom = -s;
 directionalLight.shadow.camera.near   =  0.5;
 directionalLight.shadow.camera.far    =  50;
-
-function degrees_to_radians(degrees) {
-  var pi = Math.PI;
-  return degrees * (pi/180);
-}
 
 const loader = new THREE.TextureLoader();
 
@@ -571,121 +563,103 @@ camera.applyMatrix4(cameraTranslate);
 // Orbit controls
 const controls = new OrbitControls(camera, renderer.domElement);
 
-// Instructions display
-const instructionsElement = document.createElement('div');
-instructionsElement.style.position = 'absolute';
-instructionsElement.style.bottom = '20px';
-instructionsElement.style.left   = '20px';
-instructionsElement.style.top    = 'auto';
-instructionsElement.style.right  = 'auto';
-instructionsElement.style.color = 'white';
-instructionsElement.style.fontSize = '16px';
-instructionsElement.style.fontFamily = 'Arial, sans-serif';
-instructionsElement.style.textAlign = 'left';
-instructionsElement.innerHTML = `
-  <h3>Controls:</h3>
-  <p>O - Toggle orbit camera</p>
-`;
-instructionsElement.innerHTML = `
-  <h3 style="margin:0 0 5px;">Controls</h3>
-  <ul style="list-style:none; padding:0; margin:0; line-height:1.5;">
-    <li>⬅️/➡️/⬆️/⬇️ : Move ball</li>
-    <li>🔋 W / S     : Adjust power</li>
-    <li>🚀 Space     : Shoot</li>
-    <li>🔄 R         : Reset</li>
-    <li>📷 O         : Camera</li>
-  </ul>
-`;
+const hud = document.createElement('div');
+hud.classList.add('hud-container');
+document.body.appendChild(hud);
 
-instructionsElement.style.background   = 'rgba(0, 0, 0, 0.6)';
-instructionsElement.style.padding      = '10px 15px';
-instructionsElement.style.borderRadius = '8px';
-instructionsElement.style.boxShadow    = '0 0 10px rgba(0,0,0,0.5)';
-instructionsElement.style.lineHeight   = '1.4';
-document.body.appendChild(instructionsElement);
-
-// Power UI
-const powerContainer = document.createElement('div');
-powerContainer.style.position = 'absolute';
-powerContainer.style.bottom   = '200px';
-powerContainer.style.left     = '20px';
-powerContainer.style.width    = '200px';
-powerContainer.style.height   = '20px';
-powerContainer.style.border   = '2px solid white';
-powerContainer.style.background = 'rgba(0,0,0,0.6)';
-powerContainer.style.borderRadius = '6px';
-powerContainer.style.boxShadow = '0 0 8px rgba(0,0,0,0.4)';
-
-const powerBar = document.createElement('div');
-powerBar.id = 'powerBar';
-powerBar.style.height = '100%';
-powerBar.style.width  = `${shotPower * 100}%`; 
-powerBar.style.background = 'lime';
-
-powerContainer.appendChild(powerBar);
-document.body.appendChild(powerContainer);
-
-const powerLabel = document.createElement('div');
-powerLabel.style.position    = 'absolute';
-powerLabel.style.bottom      = '204px';
-powerLabel.style.left        = '30px';
-powerLabel.style.color       = 'white';
-powerLabel.style.fontSize    = '14px';
-powerLabel.style.fontFamily  = 'Arial, sans-serif';
-powerLabel.innerText         = `Power: ${(shotPower * 100).toFixed(0)}%`;
-document.body.appendChild(powerLabel);
-
-function updatePowerUI() {
-  const pct = Math.round(shotPower * 100);
-  powerBar.style.width  = `${pct}%`;
-  powerLabel.innerText  = `Power: ${pct}%`;
-}
-
-function computeShotSpeed() {
-  return MIN_SHOT_SPEED + (MAX_SHOT_SPEED - MIN_SHOT_SPEED) * shotPower;
-}
-
-// ── Stats UI ──
-const statsContainer = document.createElement('div');
-statsContainer.style.position = 'absolute';
-statsContainer.style.top    = '20px';
-statsContainer.style.right  = '20px';
-statsContainer.style.left   = 'auto';
-statsContainer.style.bottom = 'auto';
-statsContainer.style.color    = 'white';
-statsContainer.style.fontSize = '16px';
-statsContainer.style.fontFamily = 'Arial, sans-serif';
-statsContainer.innerHTML = `
+// Stats panel
+const statsPanel = document.createElement('div');
+statsPanel.classList.add('hud-panel');
+statsPanel.innerHTML = `
   <div>Score: <span id="score">0</span></div>
   <div>Attempts: <span id="attempts">0</span></div>
   <div>Made: <span id="made">0</span></div>
   <div>Accuracy: <span id="accuracy">0%</span></div>
   <div>Combo: <span id="combo">0</span></div>
 `;
-statsContainer.style.background    = 'rgba(0, 0, 0, 0.6)';
-statsContainer.style.padding       = '10px 15px';
-statsContainer.style.borderRadius  = '8px';
-statsContainer.style.boxShadow     = '0 0 10px rgba(0,0,0,0.5)';
-statsContainer.style.lineHeight    = '1.4';
-statsContainer.style.textAlign     = 'left';
+hud.appendChild(statsPanel);
 
-document.body.appendChild(statsContainer);
+// Power bar panel
+const powerPanel = document.createElement('div');
+powerPanel.classList.add('hud-panel');
+powerPanel.innerHTML = `
+  <div>Power</div>
+  <div class="progress-bar">
+    <div id="powerFill" class="progress-fill"></div>
+  </div>
+`;
+hud.appendChild(powerPanel);
+
+// Mode & start button
+const modePanel = document.createElement('div');
+modePanel.classList.add('hud-panel');
+modePanel.innerHTML = `
+  <label>
+    Mode:
+    <select id="modeSelect">
+      <option value="${MODE_FREE}">Free</option>
+      <option value="${MODE_TIMED}">Timed</option>
+    </select>
+  </label>
+  <button id="startBtn">Start</button>
+`;
+hud.appendChild(modePanel);
+
+// Timer panel (hidden by default)
+const timerPanel = document.createElement('div');
+timerPanel.classList.add('hud-panel');
+timerPanel.id = 'timerPanel';
+timerPanel.style.display = 'none';
+timerPanel.innerText = formatTime(timeRemaining);
+hud.appendChild(timerPanel);
+
+const timeContainer = timerPanel;
+
+// Instructions panel
+const instrPanel = document.createElement('div');
+instrPanel.classList.add('hud-panel', 'instructions');
+instrPanel.innerHTML = `
+  <h4>Controls</h4>
+  <ul>
+    <li>←/→/↑/↓ Move ball</li>
+    <li>W/S Adjust power</li>
+    <li>Space Shoot</li>
+    <li>R Reset</li>
+    <li>O Toggle camera</li>
+  </ul>
+`;
+hud.appendChild(instrPanel);
+
+document.getElementById('modeSelect').addEventListener('change', e => {
+  gameMode = e.target.value;
+  document.getElementById('timerPanel').style.display =
+    gameMode === MODE_TIMED ? 'block' : 'none';
+});
+document.getElementById('startBtn').addEventListener('click', startGame);
+
+// helpers
+function updatePowerUI() {
+  const pct = Math.round(shotPower * 100);
+  document.getElementById('powerFill').style.width = `${pct}%`;
+}
 
 function updateStatsUI() {
   document.getElementById('score').innerText    = totalScore;
   document.getElementById('attempts').innerText = shotAttempts;
   document.getElementById('made').innerText     = shotsMade;
-  const pct = shotAttempts > 0
-    ? Math.round((shotsMade / shotAttempts) * 100)
-    : 0;
+  const pct = shotAttempts ? Math.round((shotsMade/shotAttempts)*100) : 0;
   document.getElementById('accuracy').innerText = `${pct}%`;
-  document.getElementById('combo').innerText = comboStreak;
+  document.getElementById('combo').innerText    = comboStreak;
   // update the canvas scoreboard:
   const minutes = String(Math.floor(totalScore/60)).padStart(2,'0');
   const seconds = String(totalScore % 60).padStart(2,'0');
   const newText = `${minutes} : ${seconds}`;
   drawScoreOnCanvas(newText);
   scoreTexture.needsUpdate = true;
+}
+
+function computeShotSpeed() {
+  return MIN_SHOT_SPEED + (MAX_SHOT_SPEED - MIN_SHOT_SPEED) * shotPower;
 }
 
 // ── Message UI ──
@@ -714,6 +688,7 @@ messageEl.style.transform  = 'translate(-50%, -50%)';
 document.body.appendChild(messageEl);
 
 let messageTimeout;
+
 function showMessage(text, success = true) {
   clearTimeout(messageTimeout);
   messageEl.innerText = text;
@@ -723,52 +698,6 @@ function showMessage(text, success = true) {
     messageEl.style.opacity = '0';
   }, 2000);
 }
-
-// ── Mode Selector UI ──
-const modeContainer = document.createElement('div');
-modeContainer.classList.add('hud-panel');
-modeContainer.innerHTML = `
-  <label>Game Mode:
-    <select id="modeSelect">
-      <option value="${MODE_FREE}">Free Shoot</option>
-      <option value="${MODE_TIMED}">Timed Challenge</option>
-    </select>
-  </label>
-  <button id="startBtn">Start</button>
-`;
-// ── Mode Selector UI ──
-modeContainer.style.position = 'absolute';
-modeContainer.style.background = 'rgba(0, 0, 0, 0.6)';
-modeContainer.style.padding    = '8px 12px';
-modeContainer.style.borderRadius = '6px';
-modeContainer.style.boxShadow    = '0 0 10px rgba(0,0,0,0.5)';
-modeContainer.style.bottom = '20px';
-modeContainer.style.right  = '20px';
-modeContainer.style.color = 'white';
-document.body.appendChild(modeContainer);
-
-// wire up the dropdown
-document.getElementById('modeSelect').addEventListener('change', e => {
-  gameMode = e.target.value;
-  // show timer only in timed mode
-  timeContainer.style.display = gameMode === MODE_TIMED ? 'block' : 'none';
-});
-
-// ── Timer UI (hidden by default) ──
-timeContainer = document.createElement('div');
-timeContainer.classList.add('hud-panel');
-
-timeContainer.style.position = 'absolute';
-timeContainer.style.background = 'rgba(0,0,0,0.6)';
-timeContainer.style.padding    = '8px 12px';
-timeContainer.style.borderRadius = '6px';
-timeContainer.style.boxShadow    = '0 0 10px rgba(0,0,0,0.5)';
-timeContainer.style.bottom    = '60px';
-timeContainer.style.right  = '20px';
-timeContainer.style.display= 'none';
-timeContainer.style.color = 'white';
-timeContainer.innerText    = formatTime(timeRemaining);
-document.body.appendChild(timeContainer);
 
 function formatTime(sec) {
   const m = Math.floor(sec/60), s = Math.floor(sec % 60);
@@ -865,6 +794,7 @@ function endGame() {
 
 // Handle key events
 function handleKeyDown(e) {
+  e.preventDefault();
   const key = e.key.toLowerCase();
 
   // 1) Always allow these, even if game isn't started yet
