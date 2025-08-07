@@ -45,6 +45,8 @@ let hasScoredThisShot = false;
 let prevBallY = BALL_RADIUS + 0.1;
 let currentHoop = null;
 let scoreSprite, scoreTexture, scoreCanvas, scoreCtx;
+let comboStreak = 0;
+let comboBonus  = 0;
 
 // add sky background
 const size = 512;                        
@@ -629,6 +631,7 @@ statsContainer.innerHTML = `
   <div>Attempts: <span id="attempts">0</span></div>
   <div>Made: <span id="made">0</span></div>
   <div>Accuracy: <span id="accuracy">0%</span></div>
+  <div>Combo: <span id="combo">0</span></div>
 `;
 statsContainer.style.background    = 'rgba(0, 0, 0, 0.6)';
 statsContainer.style.padding       = '10px 15px';
@@ -647,6 +650,7 @@ function updateStatsUI() {
     ? Math.round((shotsMade / shotAttempts) * 100)
     : 0;
   document.getElementById('accuracy').innerText = `${pct}%`;
+  document.getElementById('combo').innerText = comboStreak;
   // update the canvas scoreboard:
   const minutes = String(Math.floor(totalScore/60)).padStart(2,'0');
   const seconds = String(totalScore % 60).padStart(2,'0');
@@ -883,12 +887,25 @@ function animate() {
           // Successful shot!
           hasScoredThisShot = true;
           shotsMade++;
-          totalScore += 2;
-          showMessage("🏀 SHOT MADE!", true);
+          // bump up streak & compute bonus
+          comboStreak++;
+          comboBonus = comboStreak - 1;          
+          // award base points + bonus
+          totalScore += 2 + comboBonus;
+          if (comboBonus > 0) {
+            showMessage(`🏀 SHOT MADE! Combo ${comboStreak} (+${comboBonus})`, true);
+          } else {
+            showMessage(`🏀 SHOT MADE!`, true);
+          }
           updateStatsUI();
         } else if (ball.position.y <= BALL_RADIUS) {
           hasScoredThisShot = true;  // end this attempt
           showMessage("❌ MISSED SHOT", false);
+
+          // reset combo
+          comboStreak = 0;
+          comboBonus  = 0;
+          updateStatsUI();
         }
       }
       // store for next frame’s comparison
