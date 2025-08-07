@@ -32,13 +32,13 @@ const FRICTION = 0.8;
 const rimMeshes = []; // Array to store rim meshes for collision
 const UP = new THREE.Vector3(0, 1, 0);
 
-// — Shooting state & physics —
+// Shooting state & physics
 let ballLaunched = false;
 let ballVelocity = new THREE.Vector3();
 const hoopCenters = [];
 let trailSegments = [];
 
-// ── Scoring globals ──
+// Scoring globals
 let shotAttempts = 0;
 let shotsMade = 0;
 let totalScore = 0;
@@ -48,6 +48,18 @@ let currentHoop = null;
 let scoreSprite, scoreTexture, scoreCanvas, scoreCtx;
 let comboStreak = 0;
 let comboBonus  = 0;
+
+// Game Mode Globals
+const MODE_FREE = 'free';
+const MODE_TIMED = 'timed';
+let gameMode = MODE_FREE;
+let gameRunning = false;
+
+const CHALLENGE_DURATION = 60; 
+let timeRemaining = CHALLENGE_DURATION;
+
+// timer UI element
+let timeContainer;
 
 // add sky background
 const size = 512;                        
@@ -712,6 +724,57 @@ function showMessage(text, success = true) {
   }, 2000);
 }
 
+// ── Mode Selector UI ──
+const modeContainer = document.createElement('div');
+modeContainer.classList.add('hud-panel');
+modeContainer.innerHTML = `
+  <label>Game Mode:
+    <select id="modeSelect">
+      <option value="${MODE_FREE}">Free Shoot</option>
+      <option value="${MODE_TIMED}">Timed Challenge</option>
+    </select>
+  </label>
+  <button id="startBtn">Start</button>
+`;
+// ── Mode Selector UI ──
+modeContainer.style.position = 'absolute';
+modeContainer.style.background = 'rgba(0, 0, 0, 0.6)';
+modeContainer.style.padding    = '8px 12px';
+modeContainer.style.borderRadius = '6px';
+modeContainer.style.boxShadow    = '0 0 10px rgba(0,0,0,0.5)';
+modeContainer.style.bottom = '20px';
+modeContainer.style.right  = '20px';
+modeContainer.style.color = 'white';
+document.body.appendChild(modeContainer);
+
+// wire up the dropdown
+document.getElementById('modeSelect').addEventListener('change', e => {
+  gameMode = e.target.value;
+  // show timer only in timed mode
+  timeContainer.style.display = gameMode === MODE_TIMED ? 'block' : 'none';
+});
+
+// ── Timer UI (hidden by default) ──
+timeContainer = document.createElement('div');
+timeContainer.classList.add('hud-panel');
+
+timeContainer.style.position = 'absolute';
+timeContainer.style.background = 'rgba(0,0,0,0.6)';
+timeContainer.style.padding    = '8px 12px';
+timeContainer.style.borderRadius = '6px';
+timeContainer.style.boxShadow    = '0 0 10px rgba(0,0,0,0.5)';
+timeContainer.style.bottom    = '60px';
+timeContainer.style.right  = '20px';
+timeContainer.style.display= 'none';
+timeContainer.style.color = 'white';
+timeContainer.innerText    = formatTime(timeRemaining);
+document.body.appendChild(timeContainer);
+
+function formatTime(sec) {
+  const m = Math.floor(sec/60), s = Math.floor(sec % 60);
+  return `${m}:${s.toString().padStart(2,'0')}`;
+}
+
 function shootBall() {
   if (!ball || ballLaunched) return;
 
@@ -720,7 +783,7 @@ function shootBall() {
   hasScoredThisShot = false;
   updateStatsUI();
 
-  // 2) Pick & record the nearest hoop
+  // Pick & record the nearest hoop
   currentHoop = hoopCenters.reduce((c0, c1) =>
     ball.position.distanceToSquared(c1) < ball.position.distanceToSquared(c0)
       ? c1
@@ -728,7 +791,7 @@ function shootBall() {
     hoopCenters[0]
   );
 
-  // 3) Initialize prevBallY for scoring logic
+  // Initialize prevBallY for scoring logic
   prevBallY   = ball.position.y;
   
   ballLaunched = true;
@@ -776,28 +839,67 @@ function resetBall() {
   trailGeometry.attributes.position.needsUpdate = true;
 }
 
+// Called when “Start” is clicked
+document.getElementById('startBtn').addEventListener('click', startGame);
+
+function startGame() {
+  // reset stats & ball
+  shotAttempts = shotsMade = totalScore = comboStreak = comboBonus = 0;
+  updateStatsUI();
+  resetBall();     
+
+  if (gameMode === MODE_TIMED) {
+    timeRemaining = CHALLENGE_DURATION;
+    timeContainer.innerText = formatTime(timeRemaining);
+  }
+  gameRunning = true;
+}
+
+// Called when timer hits zero
+function endGame() {
+  gameRunning = false;
+  showMessage("⏱ TIME'S UP!", false);
+}
+
+
 
 // Handle key events
 function handleKeyDown(e) {
-  switch(e.key.toLowerCase()) {
-    case 'o':
-      isOrbitEnabled = !isOrbitEnabled;
-      break;
+  const key = e.key.toLowerCase();
 
-    case 'w':
-      shotPower = Math.min(MAX_POWER, shotPower + POWER_STEP);
-      updatePowerUI();
-      break;
+  // 1) Always allow these, even if game isn't started yet
+  if (key === 'o') {
+    isOrbitEnabled = !isOrbitEnabled;
+    return;
+  }
+  if (key === 'w') {
+    shotPower = Math.min(MAX_POWER, shotPower + POWER_STEP);
+    updatePowerUI();
+    return;
+  }
+  if (key === 's') {
+    shotPower = Math.max(MIN_POWER, shotPower - POWER_STEP);
+    updatePowerUI();
+    return;
+  }
 
-    case 's':
-      shotPower = Math.max(MIN_POWER, shotPower - POWER_STEP);
-      updatePowerUI();
-      break;
-    
+  // 2) Otherwise, only process when the game is running
+  if (!gameRunning) return;
+
+  // 3) Movement keys
+  if (key === 'arrowleft' ||
+      key === 'arrowright'||
+      key === 'arrowup'   ||
+      key === 'arrowdown') {
+    keyState[e.key] = true;
+    return;
+  }
+
+  // 4) Other in-game actions
+  switch (key) {
     case ' ':
       shootBall();
       break;
-    
     case 'r':
       resetBall();
       break;
@@ -806,10 +908,12 @@ function handleKeyDown(e) {
 
 document.addEventListener('keydown', handleKeyDown);
 
-// track arrow‐key presses for movement
-document.addEventListener('keydown',  e => { keyState[e.key] = true;  });
-document.addEventListener('keyup',    e => { keyState[e.key] = false; });
-
+document.addEventListener('keyup', e => {
+  const key = e.key;
+  if (gameRunning && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(key)) {
+    keyState[key] = false;
+  }
+});
 
 // Animation function
 function animate() {
@@ -817,6 +921,17 @@ function animate() {
 
   // Get time since last frame
   const delta = clock.getDelta();
+  if (gameRunning && gameMode === MODE_TIMED) {
+    timeRemaining -= delta;
+    if (timeRemaining <= 0) {
+      timeRemaining = 0;
+      timeContainer.innerText = formatTime(0);
+      endGame();
+    } else {
+      timeContainer.innerText = formatTime(timeRemaining);
+    }
+  }
+
   const v = moveSpeed * delta;  
 
   if (ball) {
